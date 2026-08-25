@@ -1,0 +1,229 @@
+/* Shoppable videos — placeholder styling.
+   Skeletons only for now: the players are not built yet. */
+
+/* ── Break out of the theme's `.page-width` container ──
+
+   A widget sits inside whatever section the merchant dropped it into, and in
+   most themes that means `.page-width`, which caps the width and adds side
+   padding:
+
+     .page-width { max-width: var(--page-width); margin: 0 auto; padding: 0 1.5rem; }
+
+   `:has()` is what lets a child cancel its own ancestor's styling. It is a
+   DESCENDANT match, not `>`, because Shopify wraps every app block in its own
+   `.shopify-block` element — so the widget is a grandchild of `.page-width`,
+   not a direct child, and `>` would never match.
+
+   `!important` because the theme's own `.page-width` rule is what is being
+   overridden, and it may well be more specific than this one.
+
+   ⚠️ This widens the container for EVERYTHING inside it. That is harmless
+   while a `.page-width` holds only this app block, which is the normal case
+   for a block added through the Apps section — but if a merchant puts a
+   widget in a section alongside other content, that content loses its
+   padding too. Narrow this to a wrapper of our own if that ever comes up.
+
+   Browsers without `:has()` simply skip the rule and the widget stays inside
+   the container: constrained, not broken. */
+.page-width:has(.sje-widget) {
+  max-width: none !important;
+  width: 100% !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+}
+
+.sje-widget {
+  margin-block: 1.5rem;
+}
+
+/* ── Padding: how much room the widget leaves at the sides ──
+
+   Expressed as the container's WIDTH rather than as padding, so the blocks
+   inside get the narrower measure too — padding would have left a full-width
+   scrolling row with only its contents inset.
+
+   These live in the stylesheet rather than inline on the element, because
+   each step has a different value on mobile and a `style` attribute cannot
+   carry a media query.
+
+   The block always sets `margin-inline: auto` inline, so a widget stays
+   centred even if this file fails to load; only the measure is lost. */
+.sje-widget--pad-large {
+  width: 70%;
+}
+
+.sje-widget--pad-medium {
+  width: 90%;
+}
+
+.sje-widget--pad-none {
+  width: 98%;
+}
+
+/* 750px is the breakpoint Shopify's own themes use for this. */
+@media screen and (max-width: 749px) {
+  .sje-widget--pad-large {
+    width: 85%;
+  }
+
+  .sje-widget--pad-medium {
+    width: 95%;
+  }
+
+  .sje-widget--pad-none {
+    width: 99%;
+  }
+}
+
+.sje-widget__heading {
+  margin-block-end: 0.75rem;
+}
+
+/* Shown only in the theme editor — see the snippet. Deliberately plain and
+   unbranded: it is a note to the merchant, not part of their storefront. */
+.sje-widget__notice {
+  margin-block: 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px dashed rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* ⚠️ A real HEIGHT, not `aspect-ratio` alone.
+
+   These skeletons are empty divs, so they have no intrinsic height. A flex
+   row defaults to `align-items: stretch`, which means an item's cross size
+   comes from the flex line — and the line's height comes from the items. With
+   nothing but a ratio, that is circular and resolves to 0: the items get
+   their width and collapse to zero height, and the row measures `W x 0`.
+
+   So height is stated outright, and the rows below also set
+   `align-items: flex-start` so nothing is stretched. Swap back to a ratio
+   only once these hold real content. */
+.sje-widget__item {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  height: 240px;
+  animation: sje-widget-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sje-widget-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sje-widget__item {
+    animation: none;
+  }
+}
+
+/* One row the shopper scrolls sideways. */
+.sje-widget--carousel .sje-widget__items,
+.sje-widget--stacked .sje-widget__items {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  overflow-x: auto;
+}
+
+.sje-widget--stacked .sje-widget__item {
+  flex: 0 0 clamp(140px, 22vw, 220px);
+}
+
+/* ── Carousel: a fixed 70vh group of 9:16 cards ──
+
+   The group is always 70% of the viewport height. A column flex box holds
+   that: the heading takes what it needs, the row takes the rest.
+   `min-height: 0` on the row is required — a flex item defaults to
+   `min-height: auto` and refuses to shrink below its content, which would
+   push the group past 70vh.
+
+   The cards can use `aspect-ratio` here, unlike everywhere else in this file,
+   because their height is DEFINITE: it comes from a row that fills a group of
+   a stated height, so the ratio has a real number to derive the width from.
+   `flex: 0 0 auto` keeps flex from setting the width itself and ignoring the
+   ratio. */
+.sje-widget--carousel {
+  height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sje-widget--carousel .sje-widget__heading {
+  flex: 0 0 auto;
+}
+
+.sje-widget--carousel .sje-widget__items {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.sje-widget--carousel .sje-widget__item {
+  flex: 0 0 auto;
+  height: 100%;
+  width: auto;
+  aspect-ratio: 9 / 16;
+}
+
+/* Every video at once. */
+.sje-widget--grid .sje-widget__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+/* Uneven columns, packed. */
+.sje-widget--masonry .sje-widget__items {
+  columns: 4 160px;
+  column-gap: 0.75rem;
+}
+
+.sje-widget--masonry .sje-widget__item {
+  aspect-ratio: auto;
+  height: 220px;
+  margin-block-end: 0.75rem;
+  break-inside: avoid;
+}
+
+.sje-widget--masonry .sje-widget__item:nth-child(even) {
+  height: 150px;
+}
+
+/* Circles, like a story bar. */
+.sje-widget--story-bar .sje-widget__items {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  overflow-x: auto;
+}
+
+/* Square, stated both ways — a ratio alone collapses here for the same
+   reason as the carousel, and the height must also beat the 240px base. */
+.sje-widget--story-bar .sje-widget__item {
+  flex: 0 0 72px;
+  height: 72px;
+  border-radius: 50%;
+}
+
+/* A single player pinned to the corner of the page. */
+.sje-widget--floating-bubble .sje-widget__items {
+  position: fixed;
+  inset-inline-end: 1rem;
+  inset-block-end: 1rem;
+  z-index: 5;
+}
+
+.sje-widget--floating-bubble .sje-widget__item {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+}
+
+/* The bubble shows one video at a time, whatever the widget holds. */
+.sje-widget--floating-bubble .sje-widget__item:not(:first-child) {
+  display: none;
+}

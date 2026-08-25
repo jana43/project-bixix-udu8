@@ -1,0 +1,59 @@
+# ─── Shopify CLI ──────────────────────────────────────────────────────────────
+# Machine-local CLI state: the dev/deploy bundles, the linked dev store, the
+# app's hidden config. Regenerated on every `shopify app dev` / `app deploy`,
+# never the same between two developers.
+.shopify/
+
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+# `shopify app dev` walks the whole app root and runs `<pm> install` in every
+# directory that has a package.json, so node_modules can appear at more than
+# one depth — hence the unanchored pattern.
+node_modules/
+.pnp
+.pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/versions
+
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+# The CLI writes the app's client secret and dev URLs into .env on first run.
+.env
+.env.*
+!.env.example
+
+# ─── Build output ─────────────────────────────────────────────────────────────
+# sje-shoppable-scripts is a Vite project. Its *widget* build is NOT here:
+# build.mjs writes sje-carousel.js / sje-stories.js straight into
+# extensions/shoppable-videos/assets/, and those files must stay tracked —
+# `shopify app deploy` uploads the assets directory verbatim, with no build
+# step of its own. Only the leftovers of a plain `vite build` / `vite preview`
+# are ignored here.
+sje-shoppable-scripts/dist/
+sje-shoppable-scripts/dist-ssr/
+sje-shoppable-scripts/.vite/
+*.tsbuildinfo
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Editors / OS ─────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.sw?
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.local
+.cache/
+tmp/

@@ -1,0 +1,140 @@
+{%- comment -%}
+  Story bar: the widget's heading, and a mount point Preact renders the
+  circles into.
+
+  Same shape as `SJE_Carousel` — Liquid draws only chrome, `sje-stories.js`
+  draws the content. The remaining four layouts still render Liquid skeletons
+  through `sje-widget`; they move over as their components are built.
+
+  ⚠️ The layout is `story-bar`, not `stories`. That string is the contract
+  between three places: the mount point's id, `mountAll('story-bar', …)` in
+  the entry, and the per-layout key in `window.SJE.scripts`. The script FILE
+  is `sje-stories.js` — the one place the two names differ.
+{%- endcomment -%}
+
+{%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
+{%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
+
+{%- if block.settings.widget_id == blank -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      Enter a Widget ID in this block&rsquo;s settings. You can find it under the
+      widget&rsquo;s name in the Shoppable Videos app.
+    </div>
+  {%- endif -%}
+
+{%- elsif sje_widget == blank -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      No widget found with ID {{ block.settings.widget_id }}. Check it against the ID in
+      the Shoppable Videos app.
+    </div>
+  {%- endif -%}
+
+{%- elsif sje_widget.enabled == false -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      &ldquo;{{ sje_widget.name }}&rdquo; is switched off, so it is hidden from shoppers.
+      Turn on Active in the Shoppable Videos app to show it.
+    </div>
+  {%- endif -%}
+
+{%- elsif sje_widget.mediaIds.size == 0 -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      &ldquo;{{ sje_widget.name }}&rdquo; has no videos yet, so there is nothing to show.
+      Add some in the Shoppable Videos app.
+    </div>
+  {%- endif -%}
+
+{%- else -%}
+  {%- comment -%}
+    No fixed height here, unlike the carousel: a row of circles is as tall as
+    the circles, and the component sizes them.
+  {%- endcomment -%}
+  <div
+    class="sje-widget sje-widget--story-bar sje-widget--pad-{{ block.settings.padding | default: 'medium' }}"
+    style="margin:24px auto;"
+  >
+    {%- if sje_widget.name != blank -%}
+      {%- comment -%}
+        The colour is only emitted when the merchant actually picked one — a
+        `color` setting left alone comes back blank, and always writing one
+        would stop the heading inheriting the theme's own colour.
+      {%- endcomment -%}
+      <h2
+        class="sje-widget__heading"
+        style="
+          margin:0 0 12px;
+          text-align:{{ block.settings.heading_alignment | default: 'left' }};
+          font-size:{{ block.settings.heading_size | default: 24 }}px;
+          {%- if block.settings.heading_color != blank -%}
+            color:{{ block.settings.heading_color }};
+          {%- endif -%}
+        "
+      >{{ sje_widget.name }}</h2>
+    {%- endif -%}
+
+    {% render 'sje-mount',
+      layout: 'story-bar',
+      script: 'sje-stories.js',
+      widget_id: block.settings.widget_id,
+      widget: sje_widget
+    %}
+  </div>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Videos — Story bar",
+  "target": "section",
+  "stylesheet": "sje-widget.css",
+  "settings": [
+    {
+      "type": "text",
+      "id": "widget_id",
+      "label": "Widget ID",
+      "info": "The 6-digit ID shown under the widget's name in the app."
+    },
+    {
+      "type": "select",
+      "id": "padding",
+      "label": "Padding",
+      "info": "How much room the widget leaves at the sides.",
+      "options": [
+        { "value": "large", "label": "Large" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "none", "label": "None" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "range",
+      "id": "heading_size",
+      "label": "Heading font size",
+      "min": 14,
+      "max": 64,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading color",
+      "info": "Leave empty to use the theme's own heading color."
+    }
+  ]
+}
+{% endschema %}

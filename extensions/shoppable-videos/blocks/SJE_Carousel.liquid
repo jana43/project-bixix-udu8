@@ -1,0 +1,153 @@
+{%- comment -%}
+  Carousel: the widget's heading, and a mount point Preact renders the cards
+  into.
+
+  The Liquid here only ever draws chrome — heading, spacing, and the
+  editor-only notices. Everything below the heading is `sje-carousel.js`,
+  built from `extension/sje-shoppable-scripts` and lazy-loaded by
+  `sje-mount`. There are no skeletons any more: the script fills the mount
+  point on the first sign of a visitor.
+
+  The widget comes from an app-data metafield on the app installation, which
+  Liquid reaches through the `app` object. It is hidden from the admin and
+  readable only by this app.
+{%- endcomment -%}
+
+{%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
+{%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
+
+{%- if block.settings.widget_id == blank -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      Enter a Widget ID in this block&rsquo;s settings. You can find it under the
+      widget&rsquo;s name in the Shoppable Videos app.
+    </div>
+  {%- endif -%}
+
+{%- elsif sje_widget == blank -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      No widget found with ID {{ block.settings.widget_id }}. Check it against the ID in
+      the Shoppable Videos app.
+    </div>
+  {%- endif -%}
+
+{%- elsif sje_widget.enabled == false -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      &ldquo;{{ sje_widget.name }}&rdquo; is switched off, so it is hidden from shoppers.
+      Turn on Active in the Shoppable Videos app to show it.
+    </div>
+  {%- endif -%}
+
+{%- elsif sje_widget.mediaIds.size == 0 -%}
+  {%- if request.design_mode -%}
+    <div class="sje-widget__notice">
+      &ldquo;{{ sje_widget.name }}&rdquo; has no videos yet, so there is nothing to show.
+      Add some in the Shoppable Videos app.
+    </div>
+  {%- endif -%}
+
+{%- else -%}
+  {%- comment -%}
+    The group is 70% of the viewport height, always. A column flex box holds
+    that: the heading takes what it needs, the mount point takes the rest.
+    `min-height:0` on the mount wrapper is required — a flex item defaults to
+    `min-height:auto` and refuses to shrink below its content, which would
+    push the group past 70vh.
+
+    The measure comes from `sje-widget--pad-*` in the stylesheet, where it has
+    to live: each step has a different width on mobile and a `style` attribute
+    cannot carry a media query. `margin:24px auto` is inline because this
+    element's `style` beats the stylesheet, so a `margin-inline:auto` rule
+    there would never win.
+  {%- endcomment -%}
+  <div
+    class="sje-widget sje-widget--carousel sje-widget--pad-{{ block.settings.padding | default: 'medium' }}"
+    style="height:70vh;display:flex;flex-direction:column;margin:24px auto;"
+  >
+    {%- if sje_widget.name != blank -%}
+      {%- comment -%}
+        The colour is only emitted when the merchant actually picked one. A
+        `color` setting left alone comes back blank, and always writing one
+        would stop the heading inheriting the theme's own colour.
+      {%- endcomment -%}
+      <h2
+        class="sje-widget__heading"
+        style="
+          flex:0 0 auto;
+          margin:0 0 12px;
+          text-align:{{ block.settings.heading_alignment | default: 'left' }};
+          font-size:{{ block.settings.heading_size | default: 24 }}px;
+          {%- if block.settings.heading_color != blank -%}
+            color:{{ block.settings.heading_color }};
+          {%- endif -%}
+        "
+      >{{ sje_widget.name }}</h2>
+    {%- endif -%}
+
+    <div style="flex:1 1 auto;min-height:0;">
+      {% render 'sje-mount',
+        layout: 'carousel',
+        script: 'sje-carousel.js',
+        widget_id: block.settings.widget_id,
+        widget: sje_widget
+      %}
+    </div>
+  </div>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Videos — Carousel",
+  "target": "section",
+  "stylesheet": "sje-widget.css",
+  "settings": [
+    {
+      "type": "text",
+      "id": "widget_id",
+      "label": "Widget ID",
+      "info": "The 6-digit ID shown under the widget's name in the app."
+    },
+    {
+      "type": "select",
+      "id": "padding",
+      "label": "Padding",
+      "info": "How much room the widget leaves at the sides.",
+      "options": [
+        { "value": "large", "label": "Large" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "none", "label": "None" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "range",
+      "id": "heading_size",
+      "label": "Heading font size",
+      "min": 14,
+      "max": 64,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading color",
+      "info": "Leave empty to use the theme's own heading color."
+    }
+  ]
+}
+{% endschema %}

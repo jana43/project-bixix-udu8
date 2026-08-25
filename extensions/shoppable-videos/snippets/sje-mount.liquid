@@ -1,0 +1,115 @@
+{% comment %}
+  A widget's mount point, its data, and the lazy loader for its script.
+
+  Shared by every block that renders through Preact, so the loading rules live
+  in one place. `{% render %}` runs in an isolated scope — `block` is NOT
+  visible here — so everything arrives as a parameter.
+
+  ── What goes on the page ──
+
+    <div id="sje-{layout}-{id}" data-sje-widget-id="{id}">   the mount point
+    window.SJE.widgets[id]                                   the widget
+    window.SJE.media[mediaId]                                every media it plays
+
+  The component never fetches: by the time its script runs, everything it
+  needs is already inlined above it. The media are looked up one metafield at
+  a time because a widget stores only ids.
+
+  ── Loading ──
+
+  `window.SJE.scripts` is keyed BY LAYOUT, so a page holding a carousel and a
+  story bar fetches two scripts, while a page holding three carousels fetches
+  one. That is the "load it once" rule: once per layout, not once per block.
+
+  The fetch waits for a sign of a real visitor — a pointer, a key, a scroll —
+  or for a mount point to appear after load (a theme-editor re-render, or a
+  section loaded on demand). Whichever comes first wins.
+
+  Accepts:
+    layout    - carousel | story-bar | …  (matches the id and `mountAll`)
+    script    - the asset filename, e.g. sje-carousel.js
+    widget_id - the widget's 6-digit id
+    widget    - the widget's metafield value, already resolved by the block
+{% endcomment %}
+
+{%- comment -%}
+  `display:block` is deliberate: this theme hides empty elements
+  (`div:empty { display: none }`), and a mount point is empty until Preact
+  fills it — without this the script would have nothing to render into.
+{%- endcomment -%}
+<div
+  id="sje-{{ layout }}-{{ widget_id }}"
+  class="sje-mount sje-mount--{{ layout }}"
+  data-sje-widget-id="{{ widget_id }}"
+  style="display:block;height:100%;"
+></div>
+
+<script>
+  (function () {
+    var SJE = (window.SJE = window.SJE || {});
+    SJE.widgets = SJE.widgets || {};
+    SJE.media = SJE.media || {};
+    SJE.scripts = SJE.scripts || {};
+
+    SJE.widgets[{{ widget_id | json }}] = {{ widget | json }};
+
+    {%- for sje_media_id in widget.mediaIds -%}
+      {%- assign sje_media_key = 'media_' | append: sje_media_id -%}
+      {%- assign sje_media = app.metafields.shoppable_videos[sje_media_key].value -%}
+      {%- if sje_media != blank -%}
+        SJE.media[{{ sje_media_id | json }}] = {{ sje_media | json }};
+      {%- endif -%}
+    {%- endfor -%}
+
+    var LAYOUT = {{ layout | json }};
+    var SRC = {{ script | asset_url | json }};
+
+    if (SJE.scripts[LAYOUT]) return;
+    SJE.scripts[LAYOUT] = "idle";
+
+    var EVENTS = ["pointerdown", "keydown", "touchstart", "wheel", "scroll"];
+    var observer = null;
+
+    function load() {
+      if (SJE.scripts[LAYOUT] !== "idle") return;
+      SJE.scripts[LAYOUT] = "loading";
+
+      EVENTS.forEach(function (name) {
+        window.removeEventListener(name, load);
+      });
+      if (observer) observer.disconnect();
+
+      var el = document.createElement("script");
+      el.src = SRC;
+      el.defer = true;
+      el.onerror = function () { SJE.scripts[LAYOUT] = "error"; };
+      document.head.appendChild(el);
+    }
+
+    SJE.load = SJE.load || function (layout) { if (layout === LAYOUT) load(); };
+
+    EVENTS.forEach(function (name) {
+      window.addEventListener(name, load, { once: true, passive: true });
+    });
+
+    if (window.MutationObserver) {
+      observer = new MutationObserver(function (records) {
+        for (var i = 0; i < records.length; i++) {
+          var added = records[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            var node = added[j];
+            if (node.nodeType !== 1) continue;
+            if (
+              (node.matches && node.matches("[data-sje-widget-id]")) ||
+              (node.querySelector && node.querySelector("[data-sje-widget-id]"))
+            ) {
+              load();
+              return;
+            }
+          }
+        }
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  })();
+</script>

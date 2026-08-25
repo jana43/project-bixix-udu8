@@ -1,0 +1,45 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "e0485a8d213a0d79dd2037f626fd2f08"
+application_url = "https://localhost:3000/shoppable_videos"
+embedded = true
+name = "shoppable_videos"
+
+[webhooks]
+api_version = "2026-07"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# read_files  — the `files` query behind the media picker.
+# write_files — `stagedUploadsCreate` + `fileCreate` for a video uploaded from
+#               the merchant's own machine and for the generated 3-second
+#               preview clip, and `fileDelete` to remove a clip the app itself
+#               created when it is replaced or its media is deleted. The app
+#               never deletes a file the merchant brought.
+# read_products — the resource picker and the product lookup that puts a title
+#                 and a thumbnail on each tagged product.
+# read_themes — the `themes` query behind the widget's "Add to theme" dialog,
+#               which lists the merchant's themes so the theme-editor deep link
+#               can point at the one they chose. Read only: the app never
+#               writes to a theme, it hands the merchant a link into the editor.
+# App-installation ("app data") metafields need no scope of their own: the
+# AppInstallation owner is the isolation boundary, so the media library's
+# storage is not represented here.
+scopes = "read_files,write_files,read_products,read_themes"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[access.admin]
+# Direct API access — the admin panel queries and mutates the Admin API straight
+# from the browser via App Bridge (`fetch("shopify:admin/api/…")`), with no
+# server proxy. See `lib/shared/directAdminGraphql.ts`.
+#
+# `offline` rather than the default `online`: online mode runs as the signed-in
+# staff user, so a merchant without the matching admin permission would be
+# refused on the app's OWN metafields. Offline mode uses the app's own token,
+# which is what app-owned storage should depend on.
+direct_api_mode = "offline"
+embedded_app_direct_api_access = true
+
+[auth]
+redirect_urls = [ "https://localhost:3000/shoppable_videos/api/auth/callback" ]
