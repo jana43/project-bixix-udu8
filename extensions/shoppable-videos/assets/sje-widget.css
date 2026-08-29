@@ -1,6 +1,39 @@
 /* Shoppable videos — placeholder styling.
    Skeletons only for now: the players are not built yet. */
 
+/* ── The two standard tokens ──
+
+   Every font size and every piece of spacing in this extension — in this file,
+   in the Liquid `style` attributes, and in the Preact components — is derived
+   from these two with `calc()`. They are the only magic numbers, and the media
+   query at the bottom of this block is the whole of the extension's responsive
+   behaviour: change two values, everything downstream follows.
+
+   ⚠️ `:root`, not `.sje-widget`. Two things render OUTSIDE the widget wrapper
+   and would inherit nothing from it: the Lightbox, which Preact renders into
+   `<body>` (see `lib/portal.tsx` for why), and the floating bubble, which is
+   `position: fixed`.
+
+   ⚠️ Every read of these carries the fallback literal —
+   `var(--sje-standard-spacing, 8px)`, never bare `var(--sje-standard-spacing)`.
+   This sheet has failed to load on the storefront before (see the note in
+   `snippets/sje-widget.liquid`), and an undefined custom property makes the
+   whole `calc()` invalid, which would collapse the widget to nothing. With the
+   fallback, a sheet that never arrives costs only the mobile step-down.
+
+   Component geometry — card heights, the story circle, the bubble, the grid
+   track — is derived from the spacing token as well, so a card is `* 30` and a
+   story circle is `* 9`. The multipliers are large and not round, and that is
+   fine: they are exact against the desktop base, so nothing shifts there, and
+   the whole layout steps down together on a phone.
+
+   See CLAUDE.md §3 for the multiplier table and the short list of things that
+   genuinely cannot be derived (viewport units, percentages, ratios, hairlines). */
+:root {
+  --sje-standard-font-size: 14px;
+  --sje-standard-spacing: 8px;
+}
+
 /* ── Break out of the theme's `.page-width` container ──
 
    A widget sits inside whatever section the merchant dropped it into, and in
@@ -33,7 +66,7 @@
 }
 
 .sje-widget {
-  margin-block: 1.5rem;
+  margin-block: calc(var(--sje-standard-spacing, 8px) * 3);
 }
 
 /* ── Padding: how much room the widget leaves at the sides ──
@@ -62,6 +95,18 @@
 
 /* 750px is the breakpoint Shopify's own themes use for this. */
 @media screen and (max-width: 749px) {
+  /* The whole of the extension's responsive typography and spacing, in two
+     declarations. Everything that reads these — this file, the Liquid `style`
+     attributes, the Preact components — steps down with them, so nothing else
+     in the extension needs a breakpoint of its own.
+
+     The `--pad-*` widths below are the exception, and stay hand-written: they
+     are percentages of the viewport, not multiples of a base. */
+  :root {
+    --sje-standard-font-size: 12px;
+    --sje-standard-spacing: 6px;
+  }
+
   .sje-widget--pad-large {
     width: 85%;
   }
@@ -76,17 +121,17 @@
 }
 
 .sje-widget__heading {
-  margin-block-end: 0.75rem;
+  margin-block-end: calc(var(--sje-standard-spacing, 8px) * 1.5);
 }
 
 /* Shown only in the theme editor — see the snippet. Deliberately plain and
    unbranded: it is a note to the merchant, not part of their storefront. */
 .sje-widget__notice {
-  margin-block: 1.5rem;
-  padding: 0.75rem 1rem;
+  margin-block: calc(var(--sje-standard-spacing, 8px) * 3);
+  padding: calc(var(--sje-standard-spacing, 8px) * 1.5) calc(var(--sje-standard-spacing, 8px) * 2);
   border: 1px dashed rgba(0, 0, 0, 0.25);
-  border-radius: 8px;
-  font-size: 0.875rem;
+  border-radius: calc(var(--sje-standard-spacing, 8px) * 1);
+  font-size: calc(var(--sje-standard-font-size, 14px) * 1);
   line-height: 1.4;
 }
 
@@ -103,8 +148,8 @@
    only once these hold real content. */
 .sje-widget__item {
   background: rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-  height: 240px;
+  border-radius: calc(var(--sje-standard-spacing, 8px) * 1);
+  height: calc(var(--sje-standard-spacing, 8px) * 30);
   animation: sje-widget-pulse 1.4s ease-in-out infinite;
 }
 
@@ -114,8 +159,23 @@
   }
 }
 
+/* Content still being fetched — the sticker badge's image and price while
+   `/products/{handle}.js` is in flight.
+
+   ONLY the pulse lives here, and that is not a style preference. A keyframe
+   animation cannot go in a `style` attribute, so it has to be a class; the
+   grey CANNOT, because the elements wearing this class also carry the badge's
+   shared inline styling, and an inline `background` beats a class every time.
+   This rule once set the colour too, and the image skeleton rendered as a
+   white box pulsing invisibly against a white badge. The fill is inline in
+   `Sticker.tsx` — see `SKELETON_FILL`. */
+.sje-skeleton {
+  animation: sje-widget-pulse 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .sje-widget__item {
+  .sje-widget__item,
+  .sje-skeleton {
     animation: none;
   }
 }
@@ -125,12 +185,12 @@
 .sje-widget--stacked .sje-widget__items {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
   overflow-x: auto;
 }
 
 .sje-widget--stacked .sje-widget__item {
-  flex: 0 0 clamp(140px, 22vw, 220px);
+  flex: 0 0 clamp(calc(var(--sje-standard-spacing, 8px) * 17.5), 22vw, calc(var(--sje-standard-spacing, 8px) * 27.5));
 }
 
 /* ── Carousel: a fixed 70vh group of 9:16 cards ──
@@ -172,58 +232,350 @@
 /* Every video at once. */
 .sje-widget--grid .sje-widget__items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--sje-standard-spacing, 8px) * 20), 1fr));
+  gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
 }
 
 /* Uneven columns, packed. */
 .sje-widget--masonry .sje-widget__items {
-  columns: 4 160px;
-  column-gap: 0.75rem;
+  /* Written long-hand, not as the `columns` shorthand: the shorthand parses
+     `<column-width> || <column-count>` positionally, and a `calc()` in that
+     position is where browsers disagree. */
+  column-count: 4;
+  column-width: calc(var(--sje-standard-spacing, 8px) * 20);
+  column-gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
 }
 
 .sje-widget--masonry .sje-widget__item {
   aspect-ratio: auto;
-  height: 220px;
-  margin-block-end: 0.75rem;
+  height: calc(var(--sje-standard-spacing, 8px) * 27.5);
+  margin-block-end: calc(var(--sje-standard-spacing, 8px) * 1.5);
   break-inside: avoid;
 }
 
 .sje-widget--masonry .sje-widget__item:nth-child(even) {
-  height: 150px;
+  height: calc(var(--sje-standard-spacing, 8px) * 18.75);
 }
 
 /* Circles, like a story bar. */
 .sje-widget--story-bar .sje-widget__items {
   display: flex;
   align-items: flex-start;
-  gap: 1rem;
+  gap: calc(var(--sje-standard-spacing, 8px) * 2);
   overflow-x: auto;
 }
 
 /* Square, stated both ways — a ratio alone collapses here for the same
-   reason as the carousel, and the height must also beat the 240px base. */
+   reason as the carousel, and the height must also beat the card base. */
 .sje-widget--story-bar .sje-widget__item {
-  flex: 0 0 72px;
-  height: 72px;
+  flex: 0 0 calc(var(--sje-standard-spacing, 8px) * 9);
+  height: calc(var(--sje-standard-spacing, 8px) * 9);
   border-radius: 50%;
 }
 
 /* A single player pinned to the corner of the page. */
 .sje-widget--floating-bubble .sje-widget__items {
   position: fixed;
-  inset-inline-end: 1rem;
-  inset-block-end: 1rem;
+  inset-inline-end: calc(var(--sje-standard-spacing, 8px) * 2);
+  inset-block-end: calc(var(--sje-standard-spacing, 8px) * 2);
   z-index: 5;
 }
 
 .sje-widget--floating-bubble .sje-widget__item {
-  width: 96px;
-  height: 96px;
+  width: calc(var(--sje-standard-spacing, 8px) * 12);
+  height: calc(var(--sje-standard-spacing, 8px) * 12);
   border-radius: 50%;
 }
 
 /* The bubble shows one video at a time, whatever the widget holds. */
 .sje-widget--floating-bubble .sje-widget__item:not(:first-child) {
   display: none;
+}
+
+/* ── The carousel's row scrolls, without saying so ──
+
+   The row is still a scroller — drag, wheel, swipe and keyboard all work as
+   they did. Only the bar is hidden, because the arrows underneath are the
+   visible control now and two of them side by side is one too many.
+
+   This lives here, and not inline with the rest of the row's styling, for one
+   reason: `::-webkit-scrollbar` is a pseudo-element, and a `style` attribute
+   cannot carry one. The Firefox half (`scrollbar-width`) IS set inline as
+   well, so a browser that never loads this file still hides it there.
+
+   Hiding a scrollbar hides an affordance. It is safe here only because the
+   arrows replace it — if a merchant sets them to Hidden the row keeps every
+   other way of scrolling, but nothing on screen says so. That is their call
+   to make. */
+.sje-scroller {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* the old Edge and IE */
+}
+
+.sje-scroller::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ── The product sheet ──
+
+   Everything else about the sheet is inline, for the reasons in CLAUDE.md §4.
+   These rules are here for the one reason a class is ever used on this side: a
+   `style` attribute cannot carry a keyframe, so an animation has to be a class
+   or it cannot exist at all. The same rule, and the same exception, as
+   `.sje-skeleton` above.
+
+   ⚠️ The `--out` durations are PAIRED with `EXIT_MS` in `ProductSheet.tsx`.
+   The animation is here and the unmount is in JS, and the JS timer is what
+   stops the second happening before the first has finished. Change them
+   together: too short and the sheet vanishes mid-slide, too long and it sits
+   invisible, blocking nothing but still mounted.
+
+   The easing on the way in is the one iOS uses for its own sheets — fast off
+   the mark, settling rather than bouncing. The way out is quicker and plainer,
+   because a shopper who has decided to dismiss something does not want to
+   watch it leave. */
+@keyframes sje-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sje-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sje-sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sje-sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.sje-sheet {
+  animation: sje-sheet-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* `forwards` is load-bearing on both `--out` rules: without it the element
+   snaps back to where it started the moment the animation ends, and flashes
+   for the remaining frames before the JS timer unmounts it. */
+.sje-sheet--out {
+  animation: sje-sheet-out 220ms ease-in forwards;
+}
+
+.sje-sheet__scrim {
+  animation: sje-sheet-fade-in 260ms ease;
+}
+
+.sje-sheet__scrim--out {
+  animation: sje-sheet-fade-out 220ms ease forwards;
+}
+
+/* Moving between the list and a product, inside a sheet that is already up.
+   A small slide in the direction of travel — forward into a product, backward
+   on the way home — so the two views read as one stack rather than as the
+   sheet's contents being swapped out. 6% and not more: the sheet is not going
+   anywhere, only what is in it. */
+@keyframes sje-sheet-view-in {
+  from {
+    opacity: 0;
+    transform: translateX(6%);
+  }
+}
+
+@keyframes sje-sheet-view-back {
+  from {
+    opacity: 0;
+    transform: translateX(-6%);
+  }
+}
+
+.sje-sheet__view {
+  animation: sje-sheet-view-in 200ms ease-out;
+}
+
+.sje-sheet__view--back {
+  animation: sje-sheet-view-back 200ms ease-out;
+}
+
+/* A second reduced-motion block rather than an entry in the one above, so the
+   sheet's rules and their opt-out stay together. Everything still WORKS with
+   these off — the sheet appears and disappears where it would have slid to,
+   and the JS timer that unmounts it does not depend on an animation running. */
+@media (prefers-reduced-motion: reduce) {
+  .sje-sheet,
+  .sje-sheet--out,
+  .sje-sheet__scrim,
+  .sje-sheet__scrim--out,
+  .sje-sheet__view,
+  .sje-sheet__view--back {
+    animation: none;
+  }
+}
+
+/* ── The "Added to cart" toast ──
+
+   One animation for the whole life of it: in, hold, out. The alternative is a
+   second piece of state and a second timer to drive an exit, and a toast is
+   the one thing on the sheet that genuinely does not need either — it says one
+   word, nothing can interrupt it, and it never has to survive being
+   interrupted.
+
+   ⚠️ The duration is PAIRED with `TOAST_MS` in `ProductSheet.tsx`. The
+   animation is here and the unmount is a JS timer, and the two have to agree
+   or the toast either vanishes mid-fade or lingers invisible.
+
+   `both` keeps the 0% frame before the animation starts and the 100% frame
+   after it ends, so the toast is never briefly drawn at full opacity in the
+   frame either side. */
+@keyframes sje-toast-life {
+  from {
+    opacity: 0;
+    transform: translateY(50%);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(50%);
+  }
+}
+
+/* The same life without the movement. A toast that fades is still legible as
+   a toast; one that slides is what reduced motion is asking us not to do. */
+@keyframes sje-toast-life-still {
+  from {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.sje-toast {
+  animation: sje-toast-life 2600ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sje-toast {
+    animation-name: sje-toast-life-still;
+  }
+}
+
+/* ── The swipe hint ──
+
+   Two seconds of an arrow rising, the first time a shopper opens the player on
+   a touch device. Then it is gone and never explains itself again.
+
+   It exists because taking the arrow BUTTONS away on a phone — which is the
+   right call, they are a mouse affordance and they cover the video — takes the
+   only visible sign that there is a next video at all. A reels player is a
+   convention, not an instruction, and a shopper who has not met one has
+   nothing to go on.
+
+   ⚠️ `sje-hint-life`'s duration is PAIRED with `HINT_MS` in `Lightbox.tsx`:
+   the animation is here and the unmount is a JS timer. Same arrangement as the
+   toast above.
+
+   The arrow's own loop is separate and INFINITE — it repeats for as long as
+   the hint is up, rather than being one movement the shopper may be looking
+   away for. */
+@keyframes sje-hint-life {
+  from {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sje-hint-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-60%);
+  }
+}
+
+.sje-hint {
+  animation: sje-hint-life 2000ms ease both;
+}
+
+.sje-hint__arrow {
+  animation: sje-hint-rise 1200ms ease-out infinite;
+}
+
+/* The hint still appears and still says what it says — it just stops moving,
+   which is the part reduced motion is asking about. */
+@media (prefers-reduced-motion: reduce) {
+  .sje-hint__arrow {
+    animation: none;
+  }
+}
+
+/* ── The buffering spinner ──
+
+   A ring with one lit quarter, turning. The whole thing is one border and one
+   rotation, so there is no image, no SVG and nothing to load — which matters
+   more than usual for this particular element, since the reason it is on
+   screen is that the network is already struggling.
+
+   Only the rotation lives here; the ring itself is inline in `Lightbox.tsx`
+   with everything else. A `style` attribute cannot carry a keyframe, and that
+   remains the only reason this extension uses a class at all. */
+@keyframes sje-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sje-spinner {
+  animation: sje-spin 800ms linear infinite;
+}
+
+/* ⚠️ NOT `animation: none`, unlike every other reduced-motion rule in this
+   file. A skeleton that stops pulsing is still a skeleton, but a spinner that
+   stops spinning is just a circle — the movement IS the message, and switching
+   it off would leave a shopper on a slow connection staring at a ring with no
+   way to tell it apart from a border.
+
+   So it keeps saying something and stops going round: the same opacity pulse
+   the skeletons use, which conveys "working" without any motion across the
+   screen. */
+@media (prefers-reduced-motion: reduce) {
+  .sje-spinner {
+    animation: sje-widget-pulse 1.4s ease-in-out infinite;
+  }
 }

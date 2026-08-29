@@ -7,9 +7,11 @@
 // Inline styles for the same reason as `Carousel` — this renders inside a
 // merchant's theme and must not depend on our class names surviving theirs.
 import { widgetMedia, posterOf, type SJEMedia } from "../lib/sje";
+import { sp } from "../lib/tokens";
 import type { WidgetProps } from "../lib/mount";
 
-const SIZE = 72;
+/** The circle's diameter: nine standard spacings, so 72px on desktop. */
+const SIZE = sp(9);
 /** The ring, drawn as a shadow so it costs no layout. */
 const RING = "0 0 0 2px #fff, 0 0 0 4px #c9922f";
 
@@ -19,7 +21,7 @@ function Story({ media }: { media: SJEMedia }) {
   return (
     <div
       style={{
-        flex: `0 0 ${SIZE}px`,
+        flex: `0 0 ${SIZE}`,
         height: SIZE,
         borderRadius: "50%",
         overflow: "hidden",
@@ -52,9 +54,9 @@ export function Stories({ widget }: WidgetProps) {
       style={{
         display: "flex",
         alignItems: "flex-start",
-        gap: 16,
+        gap: sp(2),
         overflowX: "auto",
-        paddingBlock: 4,
+        paddingBlock: sp(0.5),
       }}
     >
       {media.map((item) => (

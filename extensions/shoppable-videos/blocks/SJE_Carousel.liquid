@@ -16,6 +16,15 @@
 {%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
 {%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
 
+{%- comment -%}
+  The two standard tokens, in the short form the sizes below are written
+  against. Every size in this block is a multiple of one of them, never a bare
+  number — see CLAUDE.md §3. The fallback literal inside `var()` is what keeps
+  the block rendering at the desktop base if `sje-widget.css` fails to load.
+{%- endcomment -%}
+{%- assign sje_sp = 'var(--sje-standard-spacing, 8px)' -%}
+{%- assign sje_fs = 'var(--sje-standard-font-size, 14px)' -%}
+
 {%- if block.settings.widget_id == blank -%}
   {%- if request.design_mode -%}
     <div class="sje-widget__notice">
@@ -58,13 +67,16 @@
 
     The measure comes from `sje-widget--pad-*` in the stylesheet, where it has
     to live: each step has a different width on mobile and a `style` attribute
-    cannot carry a media query. `margin:24px auto` is inline because this
+    cannot carry a media query. The block margin is inline because this
     element's `style` beats the stylesheet, so a `margin-inline:auto` rule
-    there would never win.
+    there would never win — and it is three standard spacings, so it tightens
+    on a phone with everything else. The 70vh is left alone: a viewport unit is
+    already relative, and pinning it to a px token would make the group LESS
+    responsive, not more.
   {%- endcomment -%}
   <div
     class="sje-widget sje-widget--carousel sje-widget--pad-{{ block.settings.padding | default: 'medium' }}"
-    style="height:70vh;display:flex;flex-direction:column;margin:24px auto;"
+    style="height:70vh;display:flex;flex-direction:column;margin:calc({{ sje_sp }} * 3) auto;"
   >
     {%- if sje_widget.name != blank -%}
       {%- comment -%}
@@ -72,13 +84,22 @@
         `color` setting left alone comes back blank, and always writing one
         would stop the heading inheriting the theme's own colour.
       {%- endcomment -%}
+      {%- comment -%}
+        The merchant's size feeds a TOKEN, not `font-size` directly, so the
+        heading is derived from the standard scale like everything else. The
+        setting is a percentage — 175 means 1.75x the standard font size — so
+        the heading now shrinks on a phone with the rest of the widget, which
+        an absolute px never did.
+      {%- endcomment -%}
+      {%- assign heading_mult = block.settings.heading_scale | default: 175 | divided_by: 100.0 -%}
       <h2
         class="sje-widget__heading"
         style="
+          --sje-heading-font-size:calc({{ sje_fs }} * {{ heading_mult }});
           flex:0 0 auto;
-          margin:0 0 12px;
+          margin:0 0 calc({{ sje_sp }} * 1.5);
           text-align:{{ block.settings.heading_alignment | default: 'left' }};
-          font-size:{{ block.settings.heading_size | default: 24 }}px;
+          font-size:var(--sje-heading-font-size);
           {%- if block.settings.heading_color != blank -%}
             color:{{ block.settings.heading_color }};
           {%- endif -%}
@@ -91,7 +112,8 @@
         layout: 'carousel',
         script: 'sje-carousel.js',
         widget_id: block.settings.widget_id,
-        widget: sje_widget
+        widget: sje_widget,
+        settings: block.settings
       %}
     </div>
   </div>
@@ -134,19 +156,63 @@
     },
     {
       "type": "range",
-      "id": "heading_size",
+      "id": "heading_scale",
       "label": "Heading font size",
-      "min": 14,
-      "max": 64,
-      "step": 2,
-      "unit": "px",
-      "default": 24
+      "info": "As a percentage of the widget's standard text size, so it scales down on phones along with everything else.",
+      "min": 100,
+      "max": 400,
+      "step": 25,
+      "unit": "%",
+      "default": 175
     },
     {
       "type": "color",
       "id": "heading_color",
       "label": "Heading color",
       "info": "Leave empty to use the theme's own heading color."
+    },
+    {
+      "type": "select",
+      "id": "arrow_position",
+      "label": "Scroll arrows",
+      "info": "Where the arrows sit under the row. The row can always be swiped or dragged, whichever you choose.",
+      "options": [
+        { "value": "hidden", "label": "Hidden" },
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "range",
+      "id": "arrow_scale",
+      "label": "Arrow size",
+      "info": "As a percentage of the widget's standard spacing, so the arrows scale down on phones along with everything else.",
+      "min": 200,
+      "max": 1000,
+      "step": 50,
+      "unit": "%",
+      "default": 500
+    },
+    {
+      "type": "checkbox",
+      "id": "sticker_on_preview",
+      "label": "Show product sticker in preview video",
+      "info": "The product badge over each video in the row. The full-screen player is set separately, below.",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "player_products",
+      "label": "Products in the full-screen video",
+      "info": "How the video that opens when a shopper taps a card shows its tagged products.",
+      "options": [
+        { "value": "sticker", "label": "Sticker on the video" },
+        { "value": "free-scroll", "label": "Scrolling list" },
+        { "value": "hidden", "label": "Hidden" }
+      ],
+      "default": "sticker"
     }
   ]
 }

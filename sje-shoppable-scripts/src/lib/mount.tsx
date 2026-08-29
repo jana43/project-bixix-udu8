@@ -17,9 +17,13 @@
 // never mounts twice over the top of itself.
 import { render, type ComponentType } from "preact";
 import { widget, type SJEWidget } from "./sje";
+import { readSettings, type SJESettings } from "./settings";
 
 export interface WidgetProps {
+  /** The merchant's content, shared by every block showing this widget. */
   widget: SJEWidget;
+  /** This one placement's appearance, from the block's theme-editor settings. */
+  settings: SJESettings;
 }
 
 /** Marks a node as rendered, so a re-scan skips it. */
@@ -41,7 +45,9 @@ function mountInto(node: HTMLElement, Component: ComponentType<WidgetProps>): vo
   }
 
   node.dataset[MOUNTED] = "1";
-  render(<Component widget={found} />, node);
+  // Read per mount point, not once per script: two blocks can show the same
+  // widget with different settings, and each owns its own.
+  render(<Component widget={found} settings={readSettings(node)} />, node);
 }
 
 /**
