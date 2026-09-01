@@ -1,5 +1,22 @@
-{% render 'sje-widget', layout: 'floating-bubble', widget_id: block.settings.widget_id, padding: block.settings.padding, heading_alignment: block.settings.heading_alignment, heading_scale: block.settings.heading_scale, heading_color: block.settings.heading_color %}
-
+{%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
+{%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
+{%- if block.settings.widget_id == blank -%}
+  {% render 'sje-notice' %}
+{%- elsif sje_widget == blank -%}
+  {% render 'sje-notice', reason: 'not-found', widget_id: block.settings.widget_id %}
+{%- elsif sje_widget.enabled == false -%}
+  {% render 'sje-notice', reason: 'off', name: sje_widget.name %}
+{%- elsif sje_widget.media.size == 0 -%}
+  {% render 'sje-notice', reason: 'empty', name: sje_widget.name %}
+{%- else -%}
+  {% render 'sje-mount',
+    layout: 'floating-bubble',
+    script: 'sje-bubble.js',
+    widget_id: block.settings.widget_id,
+    widget: sje_widget,
+    settings: block.settings
+  %}
+{%- endif -%}
 {% schema %}
 {
   "name": "Videos — Floating bubble",
@@ -10,47 +27,127 @@
       "type": "text",
       "id": "widget_id",
       "label": "Widget ID",
-      "info": "The 6-digit ID shown under the widget's name in the app."
+      "info": "The 6-digit ID shown under the widget's name in the app. The bubble shows this widget's first video, and opens the whole widget when it is tapped. Turn on Shuffle in the app to show a random one instead. Add this block to the pages you want the bubble on — it floats over that page only, not the whole storefront."
+    },
+    {
+      "type": "checkbox",
+      "id": "shuffle",
+      "label": "Shuffle videos",
+      "info": "Show a random one of this widget's videos instead of always the first. It is drawn once per visit, so it does not change under the shopper.",
+      "default": false
+    },
+    {
+      "type": "header",
+      "content": "Bubble"
     },
     {
       "type": "select",
-      "id": "padding",
-      "label": "Padding",
-      "info": "How much room the widget leaves at the sides.",
+      "id": "bubble_shape",
+      "label": "Shape",
+      "info": "A circle crops the video to its middle band, like a story. A rectangle shows the whole 9:16 frame and takes about twice the height for the same width.",
       "options": [
-        { "value": "large", "label": "Large" },
-        { "value": "medium", "label": "Medium" },
-        { "value": "none", "label": "None" }
+        { "value": "circle", "label": "Circle" },
+        { "value": "rectangle", "label": "Rectangle" }
       ],
-      "default": "medium"
+      "default": "circle"
     },
     {
       "type": "select",
-      "id": "heading_alignment",
-      "label": "Heading alignment",
+      "id": "bubble_position",
+      "label": "Corner",
+      "info": "Which corner of the screen it is pinned to. It stays there as the shopper scrolls.",
       "options": [
-        { "value": "left", "label": "Left" },
-        { "value": "center", "label": "Center" },
-        { "value": "right", "label": "Right" }
+        { "value": "bottom-right", "label": "Bottom right" },
+        { "value": "bottom-left", "label": "Bottom left" },
+        { "value": "top-right", "label": "Top right" },
+        { "value": "top-left", "label": "Top left" }
       ],
-      "default": "left"
+      "default": "bottom-right"
     },
     {
       "type": "range",
-      "id": "heading_scale",
-      "label": "Heading font size",
-      "info": "As a percentage of the widget's standard text size, so it scales down on phones along with everything else.",
-      "min": 100,
-      "max": 400,
-      "step": 25,
-      "unit": "%",
-      "default": 175
+      "id": "bubble_scale",
+      "label": "Size",
+      "info": "The bubble's width, as a multiple of the widget's standard spacing — 1200 is 96px on a desktop and 72px on a phone. A rectangle takes its height from this and the 9:16 shape.",
+      "min": 600,
+      "max": 2400,
+      "step": 100,
+      "unit": "x",
+      "default": 1200
     },
     {
-      "type": "color",
-      "id": "heading_color",
-      "label": "Heading color",
-      "info": "Leave empty to use the theme's own heading color."
+      "type": "range",
+      "id": "bubble_offset",
+      "label": "Distance from the edges",
+      "info": "A multiple of the widget's standard spacing — 200 is 16px on a desktop. On a phone with a notch or a home indicator the bubble clears it automatically, whatever this says.",
+      "min": 0,
+      "max": 800,
+      "step": 50,
+      "unit": "x",
+      "default": 200
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Corner radius",
+      "info": "Ignored unless Shape is set to Rectangle. A multiple of the widget's standard spacing; 100 is 8px on a desktop, and 0 is square corners.",
+      "min": 0,
+      "max": 400,
+      "step": 25,
+      "unit": "x",
+      "default": 100
+    },
+    {
+      "type": "header",
+      "content": "Behavior"
+    },
+    {
+      "type": "select",
+      "id": "preview_mode",
+      "label": "Bubble preview",
+      "info": "The video autoplays muted and looping. A still image fetches nothing but the poster and shows a play symbol instead. Tapping the bubble plays the full video either way.",
+      "options": [
+        { "value": "video", "label": "Playing video" },
+        { "value": "image", "label": "Still image" }
+      ],
+      "default": "video"
+    },
+    {
+      "type": "checkbox",
+      "id": "lazy_load",
+      "label": "Show only after the shopper interacts",
+      "info": "On, the bubble downloads nothing and appears on the shopper's first move, tap or scroll — which keeps it out of the page's loading time entirely. Turn it off to have it there from the moment the page opens, at the cost of page speed.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "bubble_dismissible",
+      "label": "Let shoppers close it",
+      "info": "Adds a small close button. Closing it is remembered for the rest of that browsing session and forgotten by their next visit.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_on_mobile",
+      "label": "Show on mobile",
+      "info": "A bubble covers far more of a phone screen than of a desktop one. Turn this off to keep it to larger screens.",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Products"
+    },
+    {
+      "type": "select",
+      "id": "player_products",
+      "label": "Products in the full-screen video",
+      "info": "How the video that opens when a shopper taps the bubble shows its tagged products. The bubble itself never carries a product badge — it is too small to read one.",
+      "options": [
+        { "value": "sticker", "label": "Sticker on the video" },
+        { "value": "free-scroll", "label": "Scrolling product row" },
+        { "value": "hidden", "label": "Hidden" }
+      ],
+      "default": "sticker"
     }
   ]
 }

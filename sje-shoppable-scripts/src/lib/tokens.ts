@@ -18,7 +18,8 @@
 // which is not something inline numbers can ever do.
 //
 // ⚠️ The fallback is not optional. `sje-widget.css` has failed to load on the
-// storefront before (see the note in `snippets/sje-widget.liquid`), and an
+// storefront before — twice: `asset_url`, which resolves against the THEME's
+// assets rather than the app's, and then the schema's `stylesheet` key — and an
 // undefined custom property makes the whole `calc()` invalid — the declaration
 // is dropped, not defaulted. With the fallback, a missing sheet costs only the
 // mobile step-down.
@@ -31,6 +32,40 @@ export const FONT_SIZE_VAR = "--sje-standard-font-size";
 export const SPACING_VAR = "--sje-standard-spacing";
 
 /**
+ * The story circle's own unit — the documented exception to "two tokens".
+ *
+ * ⚠️ It steps UP at the breakpoint, not down: 8px to 9px. The story circle is
+ * the one thing in this extension that must get BIGGER on a phone, because it
+ * is content rather than chrome and is already the smallest thing drawn. The
+ * long version is beside its declaration in `sje-widget.css`.
+ *
+ * There is no `su()` helper to match `sp()` and `fs()`, deliberately. Only two
+ * measurements read this — the circle and its ring — and both need a NUMBER
+ * rather than a CSS length, because they are percentages of it computed in JS
+ * from a merchant setting.
+ */
+export const STORY_UNIT_VAR = "--sje-story-unit";
+
+/**
+ * The product badge's own type, which also steps UP at the breakpoint — 14px
+ * to 16px, and 600 to 700.
+ *
+ * Same reasoning as `STORY_UNIT_VAR`: a price on a badge is content, not
+ * chrome, and it is the smallest text this extension draws. At the standard
+ * scale a phone took it to about 5px. The weight goes up because the badge
+ * sits on moving video, where a 600 face at 7px loses its edges to the
+ * compression.
+ *
+ * ⚠️ The badge's SIZE is not here and must not come here. That is
+ * `sticker.size`, a percentage of the video frame set per-video in the app,
+ * and it has to stay exactly what the merchant placed in the position editor.
+ * Only the type inside the badge answers the breakpoint.
+ */
+export const STICKER_FONT_VAR = "--sje-sticker-font-size";
+export const STICKER_WEIGHT_VAR = "--sje-sticker-font-weight";
+
+
+/**
  * The desktop values, mirroring the `:root` block in `sje-widget.css`.
  *
  * These are the `var()` fallbacks, so they are what the extension renders at
@@ -38,6 +73,11 @@ export const SPACING_VAR = "--sje-standard-spacing";
  */
 export const BASE_FONT_SIZE = 14;
 export const BASE_SPACING = 8;
+/** The desktop value of `STORY_UNIT_VAR`. Keep in step with `sje-widget.css`. */
+export const BASE_STORY_UNIT = 8;
+/** The desktop values of the two sticker tokens. Same pairing. */
+export const BASE_STICKER_FONT = 14;
+export const BASE_STICKER_WEIGHT = 600;
 
 /** A CSS length derived from the standard font size. `fs(1)` is one step. */
 export const fs = (multiplier = 1): string =>
@@ -46,6 +86,17 @@ export const fs = (multiplier = 1): string =>
 /** A CSS length derived from the standard spacing. `sp(1.5)` is one and a half. */
 export const sp = (multiplier = 1): string =>
   `calc(var(${SPACING_VAR}, ${BASE_SPACING}px) * ${multiplier})`;
+
+/**
+ * A CSS length derived from the BADGE's font token — `fs()`'s counterpart for
+ * the one piece of type that gets bigger on a phone rather than smaller.
+ */
+export const bfs = (multiplier = 1): string =>
+  `calc(var(${STICKER_FONT_VAR}, ${BASE_STICKER_FONT}px) * ${multiplier})`;
+
+/** The badge's label weight. A `var()`, because it steps up at the breakpoint. */
+export const BADGE_WEIGHT = `var(${STICKER_WEIGHT_VAR}, ${BASE_STICKER_WEIGHT})`;
+
 
 /**
  * A token's resolved value in CSS pixels, for the few places a NUMBER is

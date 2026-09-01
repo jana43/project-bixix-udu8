@@ -34,6 +34,7 @@
 import { useLiveProducts } from "../lib/products";
 import { formatPrice, percentOff } from "../lib/money";
 import { productUrl } from "../lib/shopify";
+import { NBSP, NOT_EMPTY } from "../lib/notEmpty";
 import { fs, sp } from "../lib/tokens";
 import type { SJEMedia, SJEProduct } from "../lib/sje";
 
@@ -50,15 +51,6 @@ const CARD_STEPS = 24;
 
 /** The thumbnail, square: `* 6` — 48px desktop, 36px on a phone. */
 const THUMB_STEPS = 6;
-
-/**
- * ⚠️ LOAD-BEARING. Themes commonly hide empty elements
- * (`div:empty { display: none }`), and the thumbnail box is empty for a
- * product with no photo. `font-size: 0` keeps the character from taking up
- * space. CLAUDE.md §6.
- */
-const NBSP = " ";
-const NOT_EMPTY = { fontSize: 0, lineHeight: 0 } as const;
 
 /** The grey a skeleton pulses. Opaque — it sits over video, not over a page. */
 const SKELETON_FILL = "#cfcfcf";

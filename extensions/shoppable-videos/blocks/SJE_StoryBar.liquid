@@ -1,98 +1,22 @@
-{%- comment -%}
-  Story bar: the widget's heading, and a mount point Preact renders the
-  circles into.
-
-  Same shape as `SJE_Carousel` — Liquid draws only chrome, `sje-stories.js`
-  draws the content. The remaining four layouts still render Liquid skeletons
-  through `sje-widget`; they move over as their components are built.
-
-  ⚠️ The layout is `story-bar`, not `stories`. That string is the contract
-  between three places: the mount point's id, `mountAll('story-bar', …)` in
-  the entry, and the per-layout key in `window.SJE.scripts`. The script FILE
-  is `sje-stories.js` — the one place the two names differ.
-{%- endcomment -%}
-
 {%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
 {%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
-
-{%- comment -%}
-  The two standard tokens, in the short form the sizes below are written
-  against. Every size in this block is a multiple of one of them, never a bare
-  number — see CLAUDE.md §3. The fallback literal inside `var()` is what keeps
-  the block rendering at the desktop base if `sje-widget.css` fails to load.
-{%- endcomment -%}
 {%- assign sje_sp = 'var(--sje-standard-spacing, 8px)' -%}
-{%- assign sje_fs = 'var(--sje-standard-font-size, 14px)' -%}
-
 {%- if block.settings.widget_id == blank -%}
-  {%- if request.design_mode -%}
-    <div class="sje-widget__notice">
-      Enter a Widget ID in this block&rsquo;s settings. You can find it under the
-      widget&rsquo;s name in the Shoppable Videos app.
-    </div>
-  {%- endif -%}
-
+  {% render 'sje-notice' %}
 {%- elsif sje_widget == blank -%}
-  {%- if request.design_mode -%}
-    <div class="sje-widget__notice">
-      No widget found with ID {{ block.settings.widget_id }}. Check it against the ID in
-      the Shoppable Videos app.
-    </div>
-  {%- endif -%}
-
+  {% render 'sje-notice', reason: 'not-found', widget_id: block.settings.widget_id %}
 {%- elsif sje_widget.enabled == false -%}
-  {%- if request.design_mode -%}
-    <div class="sje-widget__notice">
-      &ldquo;{{ sje_widget.name }}&rdquo; is switched off, so it is hidden from shoppers.
-      Turn on Active in the Shoppable Videos app to show it.
-    </div>
-  {%- endif -%}
-
-{%- elsif sje_widget.mediaIds.size == 0 -%}
-  {%- if request.design_mode -%}
-    <div class="sje-widget__notice">
-      &ldquo;{{ sje_widget.name }}&rdquo; has no videos yet, so there is nothing to show.
-      Add some in the Shoppable Videos app.
-    </div>
-  {%- endif -%}
-
+  {% render 'sje-notice', reason: 'off', name: sje_widget.name %}
+{%- elsif sje_widget.media.size == 0 -%}
+  {% render 'sje-notice', reason: 'empty', name: sje_widget.name %}
 {%- else -%}
-  {%- comment -%}
-    No fixed height here, unlike the carousel: a row of circles is as tall as
-    the circles, and the component sizes them.
-  {%- endcomment -%}
   <div
     class="sje-widget sje-widget--story-bar sje-widget--pad-{{ block.settings.padding | default: 'medium' }}"
     style="margin:calc({{ sje_sp }} * 3) auto;"
   >
-    {%- if sje_widget.name != blank -%}
-      {%- comment -%}
-        The colour is only emitted when the merchant actually picked one — a
-        `color` setting left alone comes back blank, and always writing one
-        would stop the heading inheriting the theme's own colour.
-      {%- endcomment -%}
-      {%- comment -%}
-        The merchant's size feeds a TOKEN, not `font-size` directly, so the
-        heading is derived from the standard scale like everything else. The
-        setting is a percentage — 175 means 1.75x the standard font size — so
-        the heading now shrinks on a phone with the rest of the widget, which
-        an absolute px never did.
-      {%- endcomment -%}
-      {%- assign heading_mult = block.settings.heading_scale | default: 175 | divided_by: 100.0 -%}
-      <h2
-        class="sje-widget__heading"
-        style="
-          --sje-heading-font-size:calc({{ sje_fs }} * {{ heading_mult }});
-          margin:0 0 calc({{ sje_sp }} * 1.5);
-          text-align:{{ block.settings.heading_alignment | default: 'left' }};
-          font-size:var(--sje-heading-font-size);
-          {%- if block.settings.heading_color != blank -%}
-            color:{{ block.settings.heading_color }};
-          {%- endif -%}
-        "
-      >{{ sje_widget.name }}</h2>
+    {%- if block.settings.show_heading != false -%}
+      {% render 'sje-heading', text: sje_widget.name, settings: block.settings %}
     {%- endif -%}
-
     {% render 'sje-mount',
       layout: 'story-bar',
       script: 'sje-stories.js',
@@ -102,7 +26,6 @@
     %}
   </div>
 {%- endif -%}
-
 {% schema %}
 {
   "name": "Videos — Story bar",
@@ -116,6 +39,13 @@
       "info": "The 6-digit ID shown under the widget's name in the app."
     },
     {
+      "type": "checkbox",
+      "id": "shuffle",
+      "label": "Shuffle videos",
+      "info": "Play this widget's videos in a random order, different for every visitor. Overrides the order you arranged in the app.",
+      "default": false
+    },
+    {
       "type": "select",
       "id": "padding",
       "label": "Padding",
@@ -126,6 +56,13 @@
         { "value": "none", "label": "None" }
       ],
       "default": "medium"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_heading",
+      "label": "Show heading",
+      "info": "The widget's name, from the app. Turn it off when the section around this block already has a title.",
+      "default": true
     },
     {
       "type": "select",
@@ -142,11 +79,11 @@
       "type": "range",
       "id": "heading_scale",
       "label": "Heading font size",
-      "info": "As a percentage of the widget's standard text size, so it scales down on phones along with everything else.",
+      "info": "A multiple of the widget's standard text size, so it scales down on phones along with everything else.",
       "min": 100,
       "max": 400,
       "step": 25,
-      "unit": "%",
+      "unit": "x",
       "default": 175
     },
     {
@@ -154,6 +91,109 @@
       "id": "heading_color",
       "label": "Heading color",
       "info": "Leave empty to use the theme's own heading color."
+    },
+    {
+      "type": "header",
+      "content": "Circles"
+    },
+    {
+      "type": "range",
+      "id": "circle_scale",
+      "label": "Circle size",
+      "info": "900 is 72px on a desktop and 81px on a phone — circles are the one thing in this widget that get bigger on a small screen, not smaller.",
+      "min": 500,
+      "max": 2000,
+      "step": 50,
+      "unit": "x",
+      "default": 900
+    },
+    {
+      "type": "select",
+      "id": "ring_style",
+      "label": "Ring",
+      "options": [
+        { "value": "gradient", "label": "Gradient" },
+        { "value": "solid", "label": "Solid color" },
+        { "value": "none", "label": "None" }
+      ],
+      "default": "gradient"
+    },
+    {
+      "type": "color",
+      "id": "ring_from",
+      "label": "Ring color",
+      "info": "The only color used for a solid ring, and the start of a gradient one.",
+      "default": "#f5a623"
+    },
+    {
+      "type": "color",
+      "id": "ring_to",
+      "label": "Ring gradient end",
+      "info": "Ignored unless Ring is set to Gradient.",
+      "default": "#d6249f"
+    },
+    {
+      "type": "range",
+      "id": "ring_scale",
+      "label": "Ring thickness",
+      "info": "A multiple of the circle's own unit, so it stays in proportion as the circle scales. 50 is 4px on a desktop.",
+      "min": 25,
+      "max": 150,
+      "step": 25,
+      "unit": "x",
+      "default": 50
+    },
+    {
+      "type": "select",
+      "id": "preview_mode",
+      "label": "Circle preview",
+      "info": "Videos autoplay muted while the circle is on screen. Images fetch nothing but the poster, which is much lighter on a long row or a slow connection. Opening a circle plays the full video either way.",
+      "options": [
+        { "value": "video", "label": "Playing video" },
+        { "value": "image", "label": "Still image" }
+      ],
+      "default": "video"
+    },
+    {
+      "type": "checkbox",
+      "id": "lazy_load",
+      "label": "Load circles only when user interact",
+      "info": "On, nothing is downloaded until the shopper moves, taps or scrolls, and each circle then waits until it is on screen. Turn it off for a short bar near the top of the page, where the circles are visible immediately and watching them assemble reads as a stutter — but it costs page speed, and on a long row it fetches every clip at once.",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "row_alignment",
+      "label": "Circle alignment",
+      "info": "Only visible when there are too few circles to fill the width — a row long enough to scroll has no spare space.",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_titles",
+      "label": "Show video titles",
+      "info": "A one-line caption under each circle.",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Products"
+    },
+    {
+      "type": "select",
+      "id": "player_products",
+      "label": "Products in the full-screen video",
+      "options": [
+        { "value": "sticker", "label": "Sticker on the video" },
+        { "value": "free-scroll", "label": "Scrolling product row" },
+        { "value": "hidden", "label": "Hidden" }
+      ],
+      "default": "sticker"
     }
   ]
 }

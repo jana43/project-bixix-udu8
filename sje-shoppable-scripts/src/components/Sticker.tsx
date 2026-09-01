@@ -44,7 +44,8 @@
 // together, or the editor starts lying about where the merchant's badge ends
 // up.
 import { stickerOf, LABEL_REFERENCE_SIZE } from "../lib/sticker";
-import { BASE_SPACING, fs, sp } from "../lib/tokens";
+import { NBSP, NOT_EMPTY } from "../lib/notEmpty";
+import { BADGE_WEIGHT, BASE_SPACING, bfs, sp } from "../lib/tokens";
 import { formatPrice } from "../lib/money";
 import type { LiveProducts } from "../lib/products";
 import type { SJEMedia, SJEProduct } from "../lib/sje";
@@ -73,6 +74,20 @@ interface StickerProps {
    * behind and there is nothing to open, hands one of these over.
    */
   onOpen?: () => void;
+  /**
+   * Where to put the badge, overriding the position the merchant set on the
+   * media. Percentages of the frame, as `stickerPosition` is.
+   *
+   * ⚠️ For the ONE case where the stored position cannot mean what it says:
+   * the banner. Every other layout draws the video in a 9:16 frame, so a badge
+   * placed at 80%/82% in the app's editor lands exactly where the merchant put
+   * it. A banner is a wide box with the video cropped to fill it, so the frame
+   * the percentages were measured against is not on screen any more — and the
+   * banner also has the merchant's heading and button to keep clear of, which
+   * the editor knew nothing about. `Banner` therefore places it opposite the
+   * copy instead. Size and rotation are still the merchant's.
+   */
+  at?: { x: number; y: number };
 }
 
 /**
@@ -82,7 +97,7 @@ interface StickerProps {
  * there is no defaulting here: by this point the position, size and rotation
  * are numbers, and the product is a product.
  */
-export function Sticker({ media, frameWidth, live, onOpen }: StickerProps) {
+export function Sticker({ media, frameWidth, live, onOpen, at }: StickerProps) {
   const sticker = stickerOf(media);
   if (!sticker || frameWidth <= 0) return null;
 
@@ -133,8 +148,8 @@ export function Sticker({ media, frameWidth, live, onOpen }: StickerProps) {
       }
       style={{
         position: "absolute",
-        left: `${sticker.x}%`,
-        top: `${sticker.y}%`,
+        left: `${at?.x ?? sticker.x}%`,
+        top: `${at?.y ?? sticker.y}%`,
         transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
         // On a card the card is the button, and the badge is a label on it —
         // pointers pass straight through so there is no dead patch in the
@@ -164,25 +179,27 @@ export function Sticker({ media, frameWidth, live, onOpen }: StickerProps) {
 // The TEXT is not. The price used to be `widthPx * 0.15` under a floor, which
 // made a badge on the Lightbox's big stage carry noticeably larger text than
 // the same badge on a card — text is to be read, not part of the artwork that
-// should grow with it. Both labels below are steps on the standard scale, so
-// they are the same size wherever the badge is drawn and step down at the
-// breakpoint with everything else.
-const PRICE_STEPS = 0.5;
-const CHIP_STEPS = 0.45;
+// should grow with it. Both labels below are steps on the BADGE's own type
+// token, so they are the same size wherever the badge is drawn — and they step
+// UP at the breakpoint rather than down, because a price on a phone is the
+// last thing that should get harder to read. See `STICKER_FONT_VAR`.
+const PRICE_STEPS = 0.6;
+const CHIP_STEPS = 0.55;
 
 /**
  * The smallest a label may get, in the same steps.
  *
  * `MIN_STICKER_SIZE` is 12 against a reference of 32, so the slider's bottom
- * is `scale = 0.375` — which would take the price to 0.19 steps, under 3px, a
+ * is `scale = 0.375` — which would take the price to 0.22 steps, about 3px, a
  * grey smudge rather than a number. A badge the merchant shrank right down
  * should get small text, not unreadable text.
  *
- * It does real work at the small end and none at the large: a price runs
- * 5.6px at the slider's minimum, through 6.1px at the default, to 8.75px at
- * its maximum; a chip 5.6px to 7.9px.
+ * It does real work at the small end and none at the large. On a DESKTOP a
+ * price runs 6.3px at the slider's minimum, 7.35px at the default and 10.5px
+ * at its maximum; on a phone the badge token is 16px rather than 14px, so the
+ * same three are 7.2px, 8.4px and 12px.
  */
-const MIN_LABEL_STEPS = 0.4;
+const MIN_LABEL_STEPS = 0.45;
 
 /**
  * A label's size in steps, for a badge scaled to `scale`.
@@ -258,25 +275,6 @@ const SHADOW = "0 1px 4px rgba(0,0,0,0.25)";
 const SKELETON_FILL = "#cfcfcf";
 
 /**
- * One non-breaking space, and the styling that makes it cost nothing.
- *
- * ⚠️ LOAD-BEARING. Themes very commonly ship `div:empty { display: none }`,
- * and every box in a skeleton is by definition empty — it is standing in for
- * content that has not arrived. The theme hides them, and the badge renders as
- * a white price strip with nothing above it, which is exactly the bug this
- * chased for several rounds.
- *
- * `font-size: 0` and `line-height: 0` are what keep the character from adding
- * a line box to a box whose height is already stated. The character only has
- * to EXIST; it must never be seen or measured.
- *
- * The same rule, and the same fix, as the `&nbsp;` in the Liquid skeletons —
- * see CLAUDE.md §6.
- */
-const NBSP = " ";
-const NOT_EMPTY = { fontSize: 0, lineHeight: 0 } as const;
-
-/**
  * The floor under the card, in both directions.
  *
  * `sticker.size` is a percentage of the frame, so a badge on a narrow card
@@ -292,11 +290,15 @@ const MIN_IMAGE = sp(3);
 const LABEL = {
   display: "block",
   lineHeight: 1.2,
-  // Semi-bold, not bold. At these sizes a 700 weight fills in its own
-  // counters — the bowl of a 6px "0" closes up — and a heavier face is also a
-  // wider one, which is the last thing a label that has to fit a fixed card
-  // needs. 600 still reads as emphasis against the photo above it.
-  fontWeight: 600,
+  // A `var()`, not a number: this is the one weight in the extension that goes
+  // UP on a phone — 600 on a desktop, 700 below the breakpoint.
+  //
+  // 600 is right on a desktop, where a 700 face at these sizes starts closing
+  // its own counters (the bowl of a 6px "0" fills in) and is wider besides. On
+  // a phone the badge sits on video that has been compressed harder and is
+  // being read further from the eye, and the heavier face is what survives it.
+  // See `STICKER_FONT_VAR`.
+  fontWeight: BADGE_WEIGHT,
   color: "#111",
   textAlign: "center",
   // A price never breaks across two lines mid-number.
@@ -433,7 +435,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
             }}
           >
             <span
-              style={{ ...LABEL, fontSize: fs(labelSteps(CHIP_STEPS, scale)) }}
+              style={{ ...LABEL, fontSize: bfs(labelSteps(CHIP_STEPS, scale)) }}
               // Spelt out for a screen reader, which would otherwise announce
               // "plus three" and leave the shopper to guess at three of what.
               aria-label={`${others} more product${others === 1 ? "" : "s"} in this video`}
@@ -460,7 +462,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
                 // than left to the text, because `NOT_EMPTY` zeroes the
                 // placeholder character — and with it the line box it would
                 // otherwise have given this box.
-                height: `calc(${fs(labelSteps(PRICE_STEPS, scale))} * 1.2)`,
+                height: `calc(${bfs(labelSteps(PRICE_STEPS, scale))} * 1.2)`,
                 borderRadius: chipRadius * 0.5,
                 ...NOT_EMPTY,
               }}
@@ -468,7 +470,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
               {NBSP}
             </div>
           ) : (
-            <span style={{ ...LABEL, fontSize: fs(labelSteps(PRICE_STEPS, scale)) }}>
+            <span style={{ ...LABEL, fontSize: bfs(labelSteps(PRICE_STEPS, scale)) }}>
               {formatPrice(product.price!)}
             </span>
           )}

@@ -1,127 +1,48 @@
-{% comment %}
-  A widget's mount point, its data, and the lazy loader for its script.
-
-  Shared by every block that renders through Preact, so the loading rules live
-  in one place. `{% render %}` runs in an isolated scope — `block` is NOT
-  visible here — so everything arrives as a parameter.
-
-  ── What goes on the page ──
-
-    <div id="sje-{layout}-{id}" data-sje-widget-id="{id}">   the mount point
-    window.SJE.widgets[id]                                   the widget
-    window.SJE.widgets[id].media[]                           every media it plays
-
-  ONE object per widget, holding everything — every mp4 rung, the preview clip
-  and its rungs, the thumbnail, the tagged products. There is no separate
-  `SJE.media` lookup any more: a widget that has to be joined against a global
-  map before it can be drawn is exactly the retrieval the stored copy exists to
-  remove, and keeping both put the same bytes on the page twice.
-
-  `media` is IN PLAY ORDER, so it is the order too — there is no `mediaIds` on
-  this object to disagree with it.
-
-  The component never fetches: by the time its script runs, everything it needs
-  is already inlined above it. A widget saved before the copy existed has an
-  empty `media` in storage, and only then are its medias looked up one metafield
-  at a time and pushed on. The copy is kept current by the app: editing a video
-  rewrites it in every widget that plays it, and deleting one takes it off them.
-
-  ── Loading ──
-
-  `window.SJE.scripts` is keyed BY LAYOUT, so a page holding a carousel and a
-  story bar fetches two scripts, while a page holding three carousels fetches
-  one. That is the "load it once" rule: once per layout, not once per block.
-
-  The fetch waits for a sign of a real visitor — a mouse crossing the page, a
-  pointer, a key, a scroll —
-  or for a mount point to appear after load (a theme-editor re-render, or a
-  section loaded on demand). Whichever comes first wins.
-
-  Accepts:
-    layout    - carousel | story-bar | …  (matches the id and `mountAll`)
-    script    - the asset filename, e.g. sje-carousel.js
-    widget_id - the widget's 6-digit id
-    widget    - the widget's metafield value, already resolved by the block
-    settings  - the block's own `block.settings`, optional
-
-  ── Why settings ride on the ELEMENT ──
-
-  The widget goes on `window.SJE`, keyed by id, because it is the merchant's
-  content and every block showing it shows the same thing. Settings are the
-  opposite: they are one placement's appearance, and two carousels of the same
-  widget can be set up differently. So they are written on the mount point
-  itself, and `readSettings` in the script reads them per mount.
-
-  Serialised whole rather than one attribute per setting, so a new setting
-  needs a line in the block's `{% schema %}` and nothing here.
-{% endcomment %}
-
-{%- comment -%}
-  `display:block` is deliberate: this theme hides empty elements
-  (`div:empty { display: none }`), and a mount point is empty until Preact
-  fills it — without this the script would have nothing to render into.
-{%- endcomment -%}
 <div
   id="sje-{{ layout }}-{{ widget_id }}"
   class="sje-mount sje-mount--{{ layout }}"
   data-sje-widget-id="{{ widget_id }}"
   {%- if settings != blank -%}
-    {%- comment -%}
-      `escape` because `json` emits double quotes and this sits inside a
-      double-quoted attribute. The browser decodes them back before the script
-      ever sees the value.
-    {%- endcomment -%}
     data-sje-settings="{{ settings | json | escape }}"
   {%- endif -%}
-  style="display:block;height:100%;"
+  {%- if product_id != blank %} data-sje-product-id="{{ product_id }}"{% endif -%}
+  {%- if layout == 'floating-bubble' %} style="display:block;"{% elsif layout == 'banner' %} style="display:block;position:absolute;inset:0;"{% else %} style="display:block;height:100%;"{% endif -%}
 >
-  {%- comment -%}
-    ── The server-side skeleton ──
-
-    The script is lazy: it is not fetched until the shopper's first pointer,
-    key or scroll (see below), so without this the block draws its heading and
-    then 70vh of nothing until they touch the page. These placeholders fill
-    that gap and are the merchant's promise that something is coming.
-
-    Safe to leave inside the mount point. Preact's `render()` collects the
-    container's existing children as `excessDomChildren` and removes whatever
-    it did not itself claim, so the first render replaces this outright — no
-    hydration, no double-draw, and nothing here to clean up by hand.
-
-    Styled INLINE rather than left to `.sje-widget--carousel .sje-widget__item`
-    in the stylesheet, for the same reason everything else in this extension
-    is: the sheet has failed to load on the storefront before, and a skeleton
-    that depends on it for its HEIGHT disappears when it does — which is the
-    exact failure this is here to prevent.
-
-    ⚠️ The `&nbsp;` is LOAD-BEARING. Themes commonly hide empty elements
-    (`div:empty { display: none }`) and a placeholder has no content of its
-    own; `font-size:0;line-height:0` keeps the character from taking up space.
-    Same rule as `sje-widget.liquid`, CLAUDE.md §6.
-  {%- endcomment -%}
   {%- assign sje_sp = 'var(--sje-standard-spacing, 8px)' -%}
+  {%- assign sje_fs = 'var(--sje-standard-font-size, 14px)' -%}
+  {%- assign sje_radius = settings.card_radius | default: 100 | divided_by: 100.0 -%}
   {%- capture sje_bone -%}
-    background:rgba(0,0,0,0.08);border-radius:calc({{ sje_sp }} * 1);font-size:0;line-height:0;
+    background:rgba(0,0,0,0.08);border-radius:calc({{ sje_sp }} * {{ sje_radius }});font-size:0;line-height:0;
   {%- endcapture -%}
-
-  {%- if layout == 'story-bar' -%}
-    {%- capture sje_row -%}display:flex;align-items:flex-start;gap:calc({{ sje_sp }} * 2);overflow:hidden;{%- endcapture -%}
-    {%- capture sje_bone_shape -%}flex:0 0 calc({{ sje_sp }} * 9);height:calc({{ sje_sp }} * 9);border-radius:50%;{%- endcapture -%}
+  {%- if layout == 'floating-bubble' -%}
+  {%- elsif layout == 'story-bar' -%}
+    {%- assign sje_unit = 'var(--sje-story-unit, 8px)' -%}
+    {%- assign sje_circle_mult = settings.circle_scale | default: 900 | divided_by: 100.0 -%}
+    {%- assign sje_align = settings.row_alignment | default: 'center' -%}
+    {%- if sje_align == 'left' -%}
+      {%- assign sje_justify = 'flex-start' -%}
+    {%- elsif sje_align == 'right' -%}
+      {%- assign sje_justify = 'safe flex-end' -%}
+    {%- else -%}
+      {%- assign sje_justify = 'safe center' -%}
+    {%- endif -%}
+    {%- capture sje_row -%}display:flex;align-items:flex-start;justify-content:{{ sje_justify }};gap:calc({{ sje_sp }} * 2);overflow:hidden;{%- endcapture -%}
+    {%- capture sje_bone_column -%}flex:0 0 calc({{ sje_unit }} * {{ sje_circle_mult }});display:flex;flex-direction:column;align-items:center;gap:calc({{ sje_sp }} * 0.75);{%- endcapture -%}
+    {%- capture sje_bone_shape -%}flex:0 0 auto;width:100%;height:calc({{ sje_unit }} * {{ sje_circle_mult }});border-radius:50%;{%- endcapture -%}
+    {%- capture sje_bone_caption -%}flex:0 0 auto;width:80%;height:calc({{ sje_fs }} * 0.75 * 1.3);{%- endcapture -%}
+  {%- elsif layout == 'stacked' -%}
+    {%- capture sje_row -%}position:relative;height:75vh;overflow:hidden;{%- endcapture -%}
+  {%- elsif layout == 'banner' -%}
+  {%- elsif layout == 'product-videos' -%}
+    {%- assign sje_columns = settings.columns | default: 4 -%}
+    {%- capture sje_card_width -%}calc((100% - calc({{ sje_sp }} * 1.5) * (var(--sje-across-count, {{ sje_columns }}) - 1)) / var(--sje-across-count, {{ sje_columns }})){%- endcapture -%}
+    {%- capture sje_row -%}display:flex;align-items:flex-start;gap:calc({{ sje_sp }} * 1.5);overflow:hidden;{%- endcapture -%}
+    {%- capture sje_bone_shape -%}flex:0 0 auto;width:{{ sje_card_width }};height:auto;aspect-ratio:9 / 16;{%- endcapture -%}
+  {%- elsif layout == 'grid' -%}
+    {%- assign sje_columns = settings.columns | default: 4 -%}
+    {%- capture sje_row -%}display:grid;grid-template-columns:repeat(var(--sje-across-count, {{ sje_columns }}), minmax(0, 1fr));gap:calc({{ sje_sp }} * 1.5);{%- endcapture -%}
+    {%- capture sje_bone_shape -%}width:100%;height:auto;aspect-ratio:9 / 16;{%- endcapture -%}
   {%- else -%}
-    {%- comment -%}
-      ⚠️ The row must be exactly as tall as the REAL one, or the cards resize
-      the moment the script takes over — which is the jump a skeleton exists to
-      prevent, made worse by being the one thing the shopper is looking at.
-
-      `Carousel` is a column: the scrolling row takes `flex:1 1 auto`, and the
-      arrows under it take `flex:0 0 auto` at `paddingBlockStart: sp(1.5)` plus
-      a button `arrow_scale`% of one spacing tall. So the row is the group less
-      that strip — and the strip is nothing at all when the merchant has set
-      the arrows to Hidden.
-
-      These three numbers are the pairing: `GAP_STEPS`, the `paddingBlockStart`
-      and `arrowSize` in `Carousel.tsx`. Change one there, change it here.
-    {%- endcomment -%}
     {%- assign sje_arrows = settings.arrow_position | default: 'center' -%}
     {%- if sje_arrows == 'hidden' -%}
       {%- capture sje_row_height -%}100%{%- endcapture -%}
@@ -132,52 +53,71 @@
     {%- capture sje_row -%}display:flex;align-items:stretch;gap:calc({{ sje_sp }} * 1.5);height:{{ sje_row_height }};overflow:hidden;{%- endcapture -%}
     {%- capture sje_bone_shape -%}flex:0 0 auto;height:100%;width:auto;aspect-ratio:9 / 16;{%- endcapture -%}
   {%- endif -%}
-
+  {%- unless layout == 'floating-bubble' or layout == 'banner' -%}
   <div class="sje-widget__items" style="{{ sje_row }}" aria-hidden="true">
-    {%- comment -%}
-      One per video the widget actually plays, so the row is the right length
-      the moment the script takes over and nothing shifts. `limit` because a
-      widget of forty is still only a screenful of placeholders.
-    {%- endcomment -%}
-    {%- for sje_bone_item in widget.media limit: 8 -%}
-      <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
+    {%- if layout == 'stacked' -%}
+      {%- if widget.media.size >= 5 -%}
+        {%- assign sje_bone_limit = 5 -%}
+      {%- elsif widget.media.size >= 3 -%}
+        {%- assign sje_bone_limit = 3 -%}
+      {%- else -%}
+        {%- assign sje_bone_limit = 1 -%}
+      {%- endif -%}
+    {%- elsif layout == 'product-videos' -%}
+      {%- assign sje_bone_limit = settings.columns | default: 4 | times: 2 -%}
+    {%- elsif layout == 'grid' -%}
+      {%- assign sje_bone_limit = settings.videos_shown | default: 8 -%}
+    {%- else -%}
+      {%- assign sje_bone_limit = 8 -%}
+    {%- endif -%}
+    {%- for sje_bone_item in widget.media limit: sje_bone_limit -%}
+      {%- if layout == 'stacked' -%}
+        {%- assign sje_half = sje_bone_limit | minus: 1 | divided_by: 2 -%}
+        {%- assign sje_slot = forloop.index0 | minus: sje_half | plus: 2 -%}
+        {%- case sje_slot -%}
+          {%- when 2 -%}
+            {%- assign sje_card = 'translate(-50%, -50%);z-index:2' -%}
+          {%- when 1 -%}
+            {%- assign sje_card = 'translate(-50%, -50%) translateX(-72%) scale(0.82);z-index:1;filter:brightness(0.62)' -%}
+          {%- when 3 -%}
+            {%- assign sje_card = 'translate(-50%, -50%) translateX(72%) scale(0.82);z-index:1;filter:brightness(0.62)' -%}
+          {%- when 0 -%}
+            {%- assign sje_card = 'translate(-50%, -50%) translateX(-131.04%) scale(0.6724);z-index:0;filter:brightness(0.62)' -%}
+          {%- else -%}
+            {%- assign sje_card = 'translate(-50%, -50%) translateX(131.04%) scale(0.6724);z-index:0;filter:brightness(0.62)' -%}
+        {%- endcase -%}
+        <div
+          class="sje-widget__item"
+          style="{{ sje_bone }}position:absolute;inset-inline-start:50%;top:50%;height:100%;max-width:72%;aspect-ratio:9 / 16;transform:{{ sje_card }};"
+        >&nbsp;</div>
+      {%- elsif layout == 'story-bar' -%}
+        <div style="{{ sje_bone_column }}">
+          <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
+          {%- unless settings.show_titles == false -%}
+            <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_caption }}">&nbsp;</div>
+          {%- endunless -%}
+        </div>
+      {%- else -%}
+        <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
+      {%- endif -%}
     {%- endfor -%}
   </div>
+  {%- endunless -%}
 </div>
-
 <script>
   (function () {
     var SJE = (window.SJE = window.SJE || {});
     SJE.widgets = SJE.widgets || {};
     SJE.scripts = SJE.scripts || {};
-
-    {%- comment -%}
-      Written field by field rather than as `{{ widget | json }}` so that
-      `media` can come from the copy when there is one and be filled in from
-      the old per-media metafields when there is not — and so that nothing
-      the storefront has no use for rides along.
-
-      No `mediaIds`: `media` is already in play order, and a second list
-      saying the same thing is one more thing that can disagree with it.
-    {%- endcomment -%}
     SJE.widgets[{{ widget_id | json }}] = {
       id: {{ widget_id | json }},
       name: {{ widget.name | json }},
       layout: {{ widget.layout | json }},
       enabled: {{ widget.enabled | json }},
-      shuffle: {{ widget.shuffle | json }},
       updatedAt: {{ widget.updatedAt | json }},
       media: {% if widget.media.size > 0 %}{{ widget.media | json }}{% else %}[]{% endif %}
     };
-
     {%- if widget.media.size == 0 -%}
-      {%- comment -%}
-        The old path, for widgets saved before the copy existed. Pushed one at
-        a time rather than built as a literal: an id whose metafield has gone
-        is skipped, and skipping entries inside an array literal means getting
-        the commas right around the gaps. These widgets move over to the copy
-        on their next save in the app.
-      {%- endcomment -%}
       {%- for sje_media_id in widget.mediaIds -%}
         {%- assign sje_media_key = 'media_' | append: sje_media_id -%}
         {%- assign sje_media = app.metafields.shoppable_videos[sje_media_key].value -%}
@@ -186,70 +126,35 @@
         {%- endif -%}
       {%- endfor -%}
     {%- endif -%}
-
     var LAYOUT = {{ layout | json }};
     var SRC = {{ script | asset_url | json }};
-
     if (SJE.scripts[LAYOUT]) return;
     SJE.scripts[LAYOUT] = "idle";
-
-    {%- comment -%}
-      `mouseover` first, because it is the earliest of these a mouse user can
-      produce: it fires the moment the pointer crosses into the page, before
-      they have decided to click, scroll or reach the widget. The script is
-      then already there when they arrive at it.
-
-      Deliberately NOT `mousemove` — that fires continuously and would only
-      arrive at the same conclusion a fraction sooner, and not
-      `pointerover`, which a tap also raises and would make `touchstart`
-      redundant while being harder to reason about on a phone.
-
-      Every one of these is `once` and every one removes the rest on the first
-      to fire, so the list is a race, not five listeners left running.
-    {%- endcomment -%}
     var EVENTS = ["mouseover", "pointerdown", "keydown", "touchstart", "wheel", "scroll"];
-    var observer = null;
-
     function load() {
       if (SJE.scripts[LAYOUT] !== "idle") return;
       SJE.scripts[LAYOUT] = "loading";
-
       EVENTS.forEach(function (name) {
         window.removeEventListener(name, load);
       });
-      if (observer) observer.disconnect();
-
       var el = document.createElement("script");
       el.src = SRC;
       el.defer = true;
       el.onerror = function () { SJE.scripts[LAYOUT] = "error"; };
       document.head.appendChild(el);
     }
-
-    SJE.load = SJE.load || function (layout) { if (layout === LAYOUT) load(); };
-
-    EVENTS.forEach(function (name) {
-      window.addEventListener(name, load, { once: true, passive: true });
-    });
-
-    if (window.MutationObserver) {
-      observer = new MutationObserver(function (records) {
-        for (var i = 0; i < records.length; i++) {
-          var added = records[i].addedNodes;
-          for (var j = 0; j < added.length; j++) {
-            var node = added[j];
-            if (node.nodeType !== 1) continue;
-            if (
-              (node.matches && node.matches("[data-sje-widget-id]")) ||
-              (node.querySelector && node.querySelector("[data-sje-widget-id]"))
-            ) {
-              load();
-              return;
-            }
-          }
-        }
+    SJE.loaders = SJE.loaders || {};
+    SJE.loaders[LAYOUT] = load;
+    SJE.load = function (layout) {
+      var loader = SJE.loaders[layout];
+      if (loader) loader();
+    };
+    {%- if request.design_mode or settings.lazy_load == false -%}
+      load();
+    {%- else -%}
+      EVENTS.forEach(function (name) {
+        window.addEventListener(name, load, { once: true, passive: true });
       });
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-    }
+    {%- endif -%}
   })();
 </script>

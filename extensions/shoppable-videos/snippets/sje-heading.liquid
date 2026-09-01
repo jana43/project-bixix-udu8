@@ -1,0 +1,18 @@
+{%- if text != blank -%}
+  {%- assign sje_sp = 'var(--sje-standard-spacing, 8px)' -%}
+  {%- assign sje_fs = 'var(--sje-standard-font-size, 14px)' -%}
+  {%- assign sje_mult = settings.heading_scale | default: 175 | divided_by: 100.0 -%}
+  <h2
+    class="sje-widget__heading"
+    style="
+      --sje-heading-font-size:calc({{ sje_fs }} * {{ sje_mult }});
+      {%- if flex -%}flex:0 0 auto;{%- endif -%}
+      margin:0 0 calc({{ sje_sp }} * 1.5);
+      text-align:{{ settings.heading_alignment | default: 'left' }};
+      font-size:var(--sje-heading-font-size);
+      {%- if settings.heading_color != blank -%}
+        color:{{ settings.heading_color }};
+      {%- endif -%}
+    "
+  >{{ text }}</h2>
+{%- endif -%}

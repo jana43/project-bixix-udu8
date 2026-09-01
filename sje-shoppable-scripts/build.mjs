@@ -27,6 +27,11 @@ const OUT_DIR = resolve(here, "../extensions/shoppable-videos/assets");
 const ENTRIES = [
   { entry: "src/entries/carousel.tsx", file: "sje-carousel.js" },
   { entry: "src/entries/stories.tsx", file: "sje-stories.js" },
+  { entry: "src/entries/stacked.tsx", file: "sje-stacked.js" },
+  { entry: "src/entries/grid.tsx", file: "sje-grid.js" },
+  { entry: "src/entries/bubble.tsx", file: "sje-bubble.js" },
+  { entry: "src/entries/banner.tsx", file: "sje-banner.js" },
+  { entry: "src/entries/productVideos.tsx", file: "sje-product-videos.js" },
 ];
 
 for (const { entry, file } of ENTRIES) {

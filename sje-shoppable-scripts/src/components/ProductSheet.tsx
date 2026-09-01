@@ -43,6 +43,7 @@ import { addToCart } from "../lib/cart";
 import { formatPrice, percentOff } from "../lib/money";
 import { useLiveProducts } from "../lib/products";
 import { productUrl } from "../lib/shopify";
+import { NBSP, NOT_EMPTY } from "../lib/notEmpty";
 import { fs, sp } from "../lib/tokens";
 import { Check, ChevronLeft, ChevronRight, ShoppingBag, X } from "../lib/icons";
 import type { SJEMedia, SJEProduct, SJEVariant } from "../lib/sje";
@@ -97,15 +98,6 @@ const SALE_COLOUR = "#b3261e";
 
 /** The grey a skeleton pulses. Opaque, as everywhere else in the widget. */
 const SKELETON_FILL = "#e6e6e6";
-
-/**
- * ⚠️ LOAD-BEARING. Themes commonly hide empty elements
- * (`div:empty { display: none }`), and every skeleton box is empty by
- * definition. `font-size: 0` keeps the character from taking up space.
- * CLAUDE.md §6.
- */
-const NBSP = " ";
-const NOT_EMPTY = { fontSize: 0, lineHeight: 0 } as const;
 
 /** A tap target, and the tightest thing on the scale. See CLAUDE.md §3. */
 const CONTROL_STEPS = 4;
@@ -240,8 +232,13 @@ export function ProductSheet({ media, state, onSelect, onBack, onClose }: Produc
           position: "absolute",
           inset: 0,
           background: "rgba(0,0,0,0.45)",
+          // Nothing inside it but a colour, so a theme hiding empty elements
+          // would take the dim AND the tap-to-close with it.
+          ...NOT_EMPTY,
         }}
-      />
+      >
+        {NBSP}
+      </div>
 
       <div
         role="dialog"

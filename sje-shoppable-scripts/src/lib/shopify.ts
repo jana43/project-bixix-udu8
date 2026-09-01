@@ -18,6 +18,15 @@ declare global {
       /** `{ root: "/" }`, or `"/en-gb/"` on a localised or market-scoped store. */
       routes?: { root?: string };
       currency?: { active?: string };
+      /**
+       * `true` inside the theme editor's preview, absent everywhere else.
+       *
+       * The Liquid half of this is `request.design_mode`, which the blocks
+       * already use to decide whether to explain themselves to a merchant. This
+       * is the same question asked from a script, and Shopify sets it on every
+       * editor preview.
+       */
+      designMode?: boolean;
     };
   }
 }
@@ -52,4 +61,20 @@ export function productUrl(handle: string): string {
  */
 export function activeCurrency(fallback?: string): string | undefined {
   return window.Shopify?.currency?.active || fallback;
+}
+
+/**
+ * Whether this is the theme editor's preview rather than a real storefront.
+ *
+ * For anything a SHOPPER dismisses. A merchant clicking a close button in the
+ * editor is looking at the thing they are configuring, not asking never to see
+ * it again — and a dismissal remembered there outlives every settings change
+ * and every re-render, so the bubble they were working on simply never comes
+ * back and the block reads as broken. See `Bubble`.
+ *
+ * ⚠️ Not a substitute for `request.design_mode` in Liquid. That decides what
+ * is RENDERED, and has to, because a script has not loaded at that point.
+ */
+export function inDesignMode(): boolean {
+  return window.Shopify?.designMode === true;
 }

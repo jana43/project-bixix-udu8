@@ -1,0 +1,20 @@
+{%- if request.design_mode -%}
+  {%- if frame != blank -%}<div style="{{ frame }}">{%- endif -%}
+  <div class="sje-widget__notice">
+    {%- case reason -%}
+      {%- when 'not-found' -%}
+        No widget found with ID {{ widget_id }}. Check it against the ID in the
+        Shoppable Videos app.
+      {%- when 'off' -%}
+        &ldquo;{{ name }}&rdquo; is switched off, so it is hidden from shoppers.
+        Turn on Active in the Shoppable Videos app to show it.
+      {%- when 'empty' -%}
+        &ldquo;{{ name }}&rdquo; has no videos yet, so there is nothing to show.
+        Add some in the Shoppable Videos app.
+      {%- else -%}
+        Enter a Widget ID in this block&rsquo;s settings. You can find it under
+        the widget&rsquo;s name in the Shoppable Videos app.
+    {%- endcase -%}
+  </div>
+  {%- if frame != blank -%}</div>{%- endif -%}
+{%- endif -%}

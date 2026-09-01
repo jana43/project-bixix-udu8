@@ -12,17 +12,18 @@
 // Styling is inline for the same reason the Liquid skeletons are: this
 // renders inside a merchant's theme, where a class name of ours may collide
 // with theirs and their reset may undo ours. Inline wins both.
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { widgetMedia, posterOf, previewUrlOf, type SJEMedia } from "../lib/sje";
 import { observeInView } from "../lib/inView";
 import { useElementWidth } from "../lib/useElementWidth";
+import { useHold, usePlaybackFrozen } from "../lib/playback";
 import { useLiveProducts, type LiveProducts } from "../lib/products";
 import { stickyProduct } from "../lib/sticker";
-import { ChevronLeft, ChevronRight } from "../lib/icons";
-import { sp, useTokenPx, SPACING_VAR, BASE_SPACING } from "../lib/tokens";
+import { useRail } from "../lib/rail";
+import { sp } from "../lib/tokens";
 import { Lightbox } from "./Lightbox";
+import { RailArrows } from "./RailArrows";
 import { Sticker } from "./Sticker";
-import type { ArrowPosition } from "../lib/settings";
 import type { WidgetProps } from "../lib/mount";
 
 /** Matches the Liquid skeleton, so nothing jumps when this takes over. */
@@ -43,13 +44,6 @@ const GAP_STEPS = 1.5;
  */
 const VISIBLE_ENOUGH = 0.5;
 
-/** What each arrow placement means to a flex row. `hidden` draws no row. */
-const ARROW_ALIGN: Record<Exclude<ArrowPosition, "hidden">, string> = {
-  left: "flex-start",
-  center: "center",
-  right: "flex-end",
-};
-
 const FILL = {
   position: "absolute",
   inset: 0,
@@ -62,20 +56,23 @@ const FILL = {
 interface CardProps {
   media: SJEMedia;
   /**
-   * Held still while the full-screen player is up. The card is still on
-   * screen as far as the observer is concerned, so without this every preview
-   * in the row would go on looping — and decoding — behind the overlay, in
-   * competition with the video the shopper is actually watching.
+   * Held still while a full-screen player is up ANYWHERE on the page — not
+   * only this block's. The card is still on screen as far as the observer is
+   * concerned, so without this every preview on the page would go on looping
+   * — and decoding — behind the overlay, in competition with the one video
+   * the shopper is actually watching. See `lib/playback.ts`.
    */
   frozen: boolean;
   /** Live product data for the badge. See `useLiveProducts`. */
   live: LiveProducts;
   /** Whether this placement draws the badge on its cards at all. */
   sticker: boolean;
+  /** The corner radius in spacing steps, from the block's `card_radius`. */
+  radius: number;
   onOpen: () => void;
 }
 
-function Card({ media, frozen, live, sticker, onOpen }: CardProps) {
+function Card({ media, frozen, live, sticker, radius, onOpen }: CardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -152,7 +149,7 @@ function Card({ media, frozen, live, sticker, onOpen }: CardProps) {
         flex: "0 0 auto",
         height: CARD_HEIGHT,
         aspectRatio: "9 / 16",
-        borderRadius: sp(1),
+        borderRadius: sp(radius),
         overflow: "hidden",
         background: "rgba(0,0,0,0.08)",
         position: "relative",
@@ -188,65 +185,8 @@ function Card({ media, frozen, live, sticker, onOpen }: CardProps) {
   );
 }
 
-interface ArrowProps {
-  direction: "prev" | "next";
-  /**
-   * Diameter in px, worked out from the block's setting against the live
-   * spacing token — so the control shrinks at the breakpoint with everything
-   * else. The icon scales with it.
-   */
-  size: number;
-  /** At the end it can move towards, so there is nowhere left to go. */
-  spent: boolean;
-  onClick: () => void;
-}
-
-function Arrow({ direction, size, spent, onClick }: ArrowProps) {
-  const isPrev = direction === "prev";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      // Left in the tree rather than removed, so the row does not reflow every
-      // time the shopper reaches an end. `disabled` is what takes it out of
-      // the tab order and stops it being announced as available.
-      disabled={spent}
-      aria-label={isPrev ? "Previous videos" : "Next videos"}
-      style={{
-        display: "grid",
-        placeItems: "center",
-        width: size,
-        height: size,
-        padding: 0,
-        // `currentColor` on a transparent ground, so the arrows read against
-        // whatever the theme's background happens to be — this widget has no
-        // say in that, and a hardcoded black or white is wrong half the time.
-        border: "1px solid currentColor",
-        borderRadius: "50%",
-        background: "transparent",
-        color: "inherit",
-        // ⚠️ `inherit`, and it has to be SAID. A `button` does not inherit
-        // `font-family` — the UA stylesheet gives every form control a font of its
-        // own — so leaving this out is not "inherit the theme's font", it is
-        // "render in whatever the browser thinks a button should look like".
-        // Deleting the declaration and inheriting are different things here.
-        fontFamily: "inherit",
-        cursor: spent ? "default" : "pointer",
-        opacity: spent ? 0.3 : 1,
-        transition: "opacity 150ms ease",
-        WebkitTapHighlightColor: "transparent",
-      }}
-    >
-      {/* Half the button, so the glyph keeps its proportions as the merchant
-          scales the control. */}
-      {isPrev ? <ChevronLeft size={Math.round(size / 2)} /> : <ChevronRight size={Math.round(size / 2)} />}
-    </button>
-  );
-}
-
 export function Carousel({ widget, settings }: WidgetProps) {
-  const media = widgetMedia(widget);
+  const media = widgetMedia(widget, settings.shuffle);
 
   // The badges' products, fetched once for the whole row.
   //
@@ -263,98 +203,36 @@ export function Carousel({ widget, settings }: WidgetProps) {
     }),
   );
 
-  const scrollerRef = useRef<HTMLDivElement>(null);
-
-  // The spacing token as a number, kept current across the breakpoint. Two
-  // things need it that way: the arrows, whose diameter is a percentage of it,
-  // and the scroll step below.
-  const spacing = useTokenPx(scrollerRef, SPACING_VAR, BASE_SPACING);
+  const rail = useRail(GAP_STEPS, media.length);
 
   // Which card is open full screen, or `null` for none. The index, not the
   // media: the player moves between neighbours, and an index is what says
   // where in the row it currently is.
   const [openAt, setOpenAt] = useState<number | null>(null);
 
-  // Whether each arrow has anywhere left to go. Kept in state rather than read
-  // during render because scroll position is not something a render can see
-  // changing.
-  const [atStart, setAtStart] = useState(true);
-  const [atEnd, setAtEnd] = useState(true);
-
-  const readEnds = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    const furthest = el.scrollWidth - el.clientWidth;
-    // A pixel of slack: `scrollLeft` is fractional on zoomed and
-    // high-density displays, and an exact comparison never quite lands, which
-    // would leave an arrow lit at the end of the row with nothing to do.
-    setAtStart(el.scrollLeft <= 1);
-    setAtEnd(el.scrollLeft >= furthest - 1);
-  }, []);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    readEnds();
-    el.addEventListener("scroll", readEnds, { passive: true });
-
-    // The row's own width decides whether there is anything to scroll at all,
-    // and it changes without a scroll ever happening — the viewport resizes,
-    // the theme editor re-renders the section around it.
-    const observer =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(readEnds);
-    observer?.observe(el);
-
-    return () => {
-      el.removeEventListener("scroll", readEnds);
-      observer?.disconnect();
-    };
-  }, [readEnds, media.length]);
-
-  const scrollByCard = useCallback((direction: 1 | -1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    // One card and the gap after it. Measured rather than assumed: the card's
-    // width comes from a 9:16 ratio against the row's height, so it is only
-    // known once laid out. The gap comes from the same token the row is drawn
-    // with, so the step stays exact on both sides of the breakpoint. The
-    // fallback is for an empty row, which cannot be scrolled anyway.
-    const card = el.firstElementChild;
-    const step = card
-      ? card.getBoundingClientRect().width + spacing * GAP_STEPS
-      : el.clientWidth;
-
-    el.scrollBy({
-      left: step * direction,
-      // A shopper who asked not to be moved around should not be, even when
-      // they were the one who pressed the button.
-      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    });
-  }, [spacing]);
-
-  if (media.length === 0) return null;
-
   // A widget re-saved with fewer videos while the player is open would leave
   // the index pointing past the end. Treating that as closed is cheaper than
   // an effect, and correct on the very render that shrinks the list.
-  const open = openAt !== null && openAt < media.length ? openAt : null;
+  const playerOpen = openAt !== null && openAt < media.length;
 
-  const arrows = settings.arrowPosition;
+  // ── The two halves of the page-wide pause ──
+  //
+  // This block SAYS a player is open, and separately ASKS whether one is —
+  // its own included, which is why the two are not the same expression. A
+  // player opened from a story bar three sections up must stop these previews
+  // too: they are all competing for the same decoders and the same battery as
+  // the one video the shopper actually chose. See `lib/playback.ts`.
+  useHold(playerOpen);
+  const frozen = usePlaybackFrozen();
 
-  // The setting is a percentage of the standard spacing, so the arrows are one
-  // more thing derived from the scale rather than an absolute px that ignores
-  // it — 500% is 40px on desktop and 30px on a phone.
-  const arrowSize = Math.round((spacing * settings.arrowScale) / 100);
+  if (media.length === 0) return null;
+
+  const open = playerOpen ? openAt : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div
-        ref={scrollerRef}
+        ref={rail.ref}
         // The class carries one thing only: the WebKit scrollbar rule, which
         // is a pseudo-element and so cannot be written inline. Everything the
         // layout depends on stays in `style`, where the theme cannot reach it
@@ -380,38 +258,26 @@ export function Carousel({ widget, settings }: WidgetProps) {
           <Card
             key={item.id}
             media={item}
-            frozen={open !== null}
+            frozen={frozen}
             live={live}
             sticker={settings.stickerOnPreview}
+            // A percentage of the spacing token, as every size setting here
+            // is — `sp()` takes the multiplier, so 100% is one spacing.
+            radius={settings.cardRadius / 100}
             onOpen={() => setOpenAt(i)}
           />
         ))}
       </div>
 
-      {arrows !== "hidden" && (
-        <div
-          style={{
-            flex: "0 0 auto",
-            display: "flex",
-            justifyContent: ARROW_ALIGN[arrows],
-            gap: sp(1),
-            paddingBlockStart: sp(1.5),
-          }}
-        >
-          <Arrow
-            direction="prev"
-            size={arrowSize}
-            spent={atStart}
-            onClick={() => scrollByCard(-1)}
-          />
-          <Arrow
-            direction="next"
-            size={arrowSize}
-            spent={atEnd}
-            onClick={() => scrollByCard(1)}
-          />
-        </div>
-      )}
+      <RailArrows
+        position={settings.arrowPosition}
+        scale={settings.arrowScale}
+        spacing={rail.spacing}
+        atStart={rail.atStart}
+        atEnd={rail.atEnd}
+        onPrev={() => rail.scrollByItem(-1)}
+        onNext={() => rail.scrollByItem(1)}
+      />
 
       {open !== null && (
         <Lightbox

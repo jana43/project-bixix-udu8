@@ -139,12 +139,17 @@ export interface SJEWidget {
    */
   media: SJEMedia[];
   /**
-   * Draw in a random order instead of `media`’s. OVERRIDES it — the stored
-   * arrangement is kept intact and returns the moment this is switched off.
+   * ⚠️ There is no `shuffle` here any more. It was a property of the WIDGET,
+   * saved in the app; it is now a property of the BLOCK, set in the theme
+   * customizer — `SJESettings.shuffle`. The metafield of a widget saved before
+   * the move still carries the old field; nothing reads it, and `sje-mount`
+   * no longer copies it onto the page.
    *
-   * Absent on a widget saved before shuffle existed — read as off.
+   * The move follows the split this whole file is built on: a widget is the
+   * merchant's CONTENT and every block showing it shows the same thing, while
+   * how it is presented belongs to the placement. Two carousels of one widget
+   * can now differ in this as they already could in everything else.
    */
-  shuffle?: boolean;
   updatedAt?: string;
   version?: number;
 }
@@ -160,6 +165,34 @@ export interface SJEGlobal {
   scripts: Record<string, SJEScriptStatus>;
   booted?: boolean;
   load?: (layout: string) => void;
+  /**
+   * Whether any block on the page has a full-screen player open.
+   *
+   * Lives HERE, on the one object every bundle shares, and not in a module of
+   * its own — each layout is built as a separate flat file with its own scope,
+   * so a module variable would be one copy per layout and a story bar's player
+   * would not reach a carousel's previews. See `lib/playback.ts`.
+   *
+   * Absent until the first player opens; `playback.ts` creates it.
+   */
+  playback?: import("./playback").PlaybackState;
+  /**
+   * Whether a floating bubble has already claimed this page.
+   *
+   * The bubble is an app BLOCK, so nothing stops a merchant adding it twice —
+   * to a header and a footer, say — and two of them would stack in the same
+   * corner, each with its own close button. It was briefly an app embed, which
+   * cannot be added twice at all; that was given up because an embed appears
+   * on EVERY page, and choosing pages matters more than the guarantee. This
+   * flag buys the guarantee back: the first bubble to mount draws, the rest
+   * draw nothing.
+   *
+   * Here rather than in a module variable for the same reason as `playback`:
+   * bundles are built separately and a module variable is one copy each. This
+   * one is only ever touched by `sje-bubble.js`, but the rule is worth keeping
+   * uniform.
+   */
+  bubbleClaimed?: boolean;
 }
 
 declare global {
@@ -200,12 +233,21 @@ export function widget(id: string): SJEWidget | null {
  * returns the moment shuffle is switched off, but while it is on nothing else
  * decides the order.
  *
+ * ⚠️ `shuffle` is the BLOCK's, passed in, not the widget's. It used to be a
+ * field on the widget and moved to the theme customizer; a caller that forgets
+ * to pass it gets the merchant's arrangement, which is the safe way to be
+ * wrong. See the note where the field used to be.
+ *
  * The non-shuffled case hands back the stored array itself rather than a copy,
  * so a component calling this every render compares equal every render.
+ *
+ * The random order is memoised per WIDGET, not per block — so two shuffled
+ * blocks of the same widget on one page agree with each other, which reads as
+ * one decision rather than two rolls of the dice.
  */
-export function widgetMedia(w: SJEWidget): SJEMedia[] {
+export function widgetMedia(w: SJEWidget, shuffle = false): SJEMedia[] {
   const media = w.media ?? [];
-  if (!w.shuffle || media.length < 2) return media;
+  if (!shuffle || media.length < 2) return media;
 
   const byId = new Map(media.map((m) => [m.id, m]));
   return shuffleOrder(
@@ -218,39 +260,122 @@ export function widgetMedia(w: SJEWidget): SJEMedia[] {
 }
 
 /**
- * Which rungs of the preview ladder to take, in order of preference.
+ * The rungs a CARD takes, in order of preference.
  *
  * 720 first, then 480. A card is a 9:16 tile a few hundred pixels wide at
  * most — 1080p is more picture than it can draw, and the whole point of the
  * preview clip is that it costs a shopper as little as possible to autoplay
  * one on every card in a row. 720p is the rung that still looks right on a
  * high-density phone; 480p is the one worth having when 720 is missing.
- *
- * ⚠️ Matched on HEIGHT, which is the rung label in BOTH orientations: a
- * portrait 1080p is 596x1080 and a landscape one is 1920x1080. Matching the
- * larger dimension would read a landscape 1080p as "1920", and the smaller
- * would read the portrait one as "596".
  */
-const PREVIEW_RUNGS = [720, 480];
+export const CARD_RUNGS = [720, 480];
 
 /**
- * The clip a card autoplays.
+ * The rungs a STORY CIRCLE takes. 480 first, and 720 only if there is no 480.
  *
- * Falls through the rungs above and then, if the video has neither, takes the
+ * A circle is a fraction of a card: 72px across by default, and 160px at the
+ * largest setting the schema allows. A portrait 480p encode is about 264px
+ * wide, so even the biggest circle on a 2x screen is asking for 320 device
+ * pixels of a 264-wide source — a touch soft at that one extreme, and
+ * comfortably native everywhere else. Against that: a story bar shows far
+ * more thumbnails at once than a carousel does, and every one of them is a
+ * decoder and a stream. The smaller rung is the right trade here in a way it
+ * would not be on a card.
+ *
+ * ⚠️ Both ladders are matched on HEIGHT, which is the rung label in BOTH
+ * orientations: a portrait 1080p is 596x1080 and a landscape one is 1920x1080.
+ * Matching the larger dimension would read a landscape 1080p as "1920", and
+ * the smaller would read the portrait one as "596".
+ */
+export const CIRCLE_RUNGS = [480, 720];
+
+/**
+ * The rungs a BANNER takes: the largest first.
+ *
+ * The opposite end of the ladder from `CIRCLE_RUNGS`, and for the opposite
+ * reason. A banner is the widest thing this extension draws — a full-bleed
+ * section, often the first thing on the page — and it plays the WHOLE video
+ * rather than a three-second clip, so it is the one place where the largest
+ * encode is the right default and a soft one is immediately obvious.
+ */
+export const BANNER_RUNGS = [1080, 720];
+
+/**
+ * The FULL video, at the largest rung asked for that the media actually has.
+ *
+ * ⚠️ `sources`, not `previewSources` — the whole video, not the short clip
+ * every other layout loops. `previewUrlOf` below is the one for thumbnails,
+ * and the two are easy to mix up: they have the same shape and differ only in
+ * which ladder they read.
+ *
+ * `undefined` for a media that is an IMAGE. `url` on one of those is the
+ * picture, not a video, and handing it to a `video` element gets a broken
+ * element rather than a still — the caller already has `posterOf` for that.
+ */
+export function videoUrlOf(
+  media: SJEMedia,
+  rungs: readonly number[] = BANNER_RUNGS,
+): string | undefined {
+  if (media.kind !== "video") return undefined;
+
+  const ladder = media.sources ?? [];
+
+  for (const rung of rungs) {
+    const match = ladder.find((source) => source.height === rung && source.url);
+    if (match) return match.url;
+  }
+
+  // The ladder's head is the largest, so a media that only ever got one
+  // encode still plays. `url` is the last resort, for anything saved before
+  // the ladder existed.
+  return ladder[0]?.url || media.url;
+}
+
+/**
+ * The clip a thumbnail autoplays, at the smallest rung it asked for that the
+ * media actually has.
+ *
+ * Falls through `rungs` and then, if the video has none of them, takes the
  * ladder's head — which is the largest, so a media that only ever got a 1080p
  * encode still plays. `previewUrl` is the last resort: it is what a media
  * saved before the ladder existed has, and it is always the ladder's head
  * anyway on one that has both.
  */
-export function previewUrlOf(media: SJEMedia): string | undefined {
+export function previewUrlOf(
+  media: SJEMedia,
+  rungs: readonly number[] = CARD_RUNGS,
+): string | undefined {
   const ladder = media.previewSources ?? [];
 
-  for (const rung of PREVIEW_RUNGS) {
+  for (const rung of rungs) {
     const match = ladder.find((source) => source.height === rung && source.url);
     if (match) return match.url;
   }
 
   return ladder[0]?.url || media.previewUrl;
+}
+
+/**
+ * The trailing numeric part of a Shopify id.
+ *
+ * ⚠️ The two sides of a product comparison are written differently and
+ * always have been. The app stores a tagged product's id as the picker gave
+ * it — `gid://shopify/Product/123` — while Liquid's `product.id` on a product
+ * page is the bare `123`. Comparing them as strings is always false, silently,
+ * and the symptom is a product row that finds nothing tagged with the product
+ * it is standing on.
+ *
+ * Everything after the last slash, so a bare id passes through untouched.
+ */
+export function numericId(id: string): string {
+  const cut = id.lastIndexOf("/");
+  return cut === -1 ? id : id.slice(cut + 1);
+}
+
+/** Whether `media` is tagged with the product `productId` refers to. */
+export function taggedWith(media: SJEMedia, productId: string): boolean {
+  const wanted = numericId(productId);
+  return (media.products ?? []).some((product) => numericId(product.id) === wanted);
 }
 
 /** The poster to show before anything plays. */

@@ -11,7 +11,7 @@
   {% render 'sje-notice', reason: 'empty', name: sje_widget.name %}
 {%- else -%}
   <div
-    class="sje-widget sje-widget--grid sje-widget--pad-{{ block.settings.padding | default: 'medium' }}"
+    class="sje-widget sje-widget--product-videos sje-widget--pad-{{ block.settings.padding | default: 'none' }}"
     style="
       --sje-across-desktop:{{ block.settings.columns | default: 4 }};
       --sje-across-mobile:{{ block.settings.columns_mobile | default: 2 }};
@@ -19,22 +19,27 @@
     "
   >
     {%- if block.settings.show_heading != false -%}
-      {% render 'sje-heading', text: sje_widget.name, settings: block.settings %}
+      {%- assign sje_title = block.settings.heading | default: sje_widget.name -%}
+      {% render 'sje-heading', text: sje_title, settings: block.settings %}
     {%- endif -%}
     {% render 'sje-mount',
-      layout: 'grid',
-      script: 'sje-grid.js',
+      layout: 'product-videos',
+      script: 'sje-product-videos.js',
       widget_id: block.settings.widget_id,
       widget: sje_widget,
-      settings: block.settings
+      settings: block.settings,
+      product_id: product.id
     %}
   </div>
 {%- endif -%}
 {% schema %}
 {
-  "name": "Videos — Grid",
+  "name": "Videos — Product row",
   "target": "section",
   "stylesheet": "sje-widget.css",
+  "enabled_on": {
+    "templates": ["product"]
+  },
   "settings": [
     {
       "type": "text",
@@ -51,22 +56,43 @@
     },
     {
       "type": "select",
+      "id": "product_filter",
+      "label": "Which videos",
+      "info": "This block knows which product the page is about, so it can favor that product's videos.",
+      "options": [
+        { "value": "tagged-first", "label": "This product's videos first" },
+        { "value": "tagged", "label": "Only this product's videos" },
+        { "value": "all", "label": "Every video in the widget" }
+      ],
+      "default": "tagged-first"
+    },
+    {
+      "type": "select",
       "id": "padding",
       "label": "Padding",
-      "info": "How much room the widget leaves at the sides.",
+      "info": "How much room the row leaves at the sides. None is usually right here — the theme's product section already has its own.",
       "options": [
         { "value": "large", "label": "Large" },
         { "value": "medium", "label": "Medium" },
         { "value": "none", "label": "None" }
       ],
-      "default": "medium"
+      "default": "none"
+    },
+    {
+      "type": "header",
+      "content": "Heading"
     },
     {
       "type": "checkbox",
       "id": "show_heading",
       "label": "Show heading",
-      "info": "The widget's name, from the app. Turn it off when the section around this block already has a title.",
       "default": true
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "info": "Leave empty to use the widget's name from the app."
     },
     {
       "type": "select",
@@ -98,13 +124,13 @@
     },
     {
       "type": "header",
-      "content": "Grid"
+      "content": "Cards"
     },
     {
       "type": "range",
       "id": "columns",
-      "label": "Columns on desktop",
-      "info": "Videos are 9:16, so more columns means taller, narrower cards. Eight across a full-width section is about a 100px video.",
+      "label": "Cards visible on desktop",
+      "info": "Each card is that fraction of whatever width this block is given, so the row fits the theme's product column at any size. More cards means smaller ones.",
       "min": 1,
       "max": 8,
       "step": 1,
@@ -113,7 +139,7 @@
     {
       "type": "range",
       "id": "columns_mobile",
-      "label": "Columns on mobile",
+      "label": "Cards visible on mobile",
       "info": "Set separately because it is a judgement, not arithmetic — nothing about four across a desktop says what a phone should do.",
       "min": 1,
       "max": 4,
@@ -122,24 +148,38 @@
     },
     {
       "type": "range",
-      "id": "videos_shown",
-      "label": "Videos shown",
-      "info": "The rest sit behind a Show more button. A count rather than a number of rows, so the same videos are shown on a phone as on a desktop and only the wrapping changes.",
-      "min": 1,
-      "max": 48,
-      "step": 1,
-      "default": 8
-    },
-    {
-      "type": "range",
       "id": "card_radius",
       "label": "Card corner radius",
-      "info": "A multiple of the widget's standard spacing, so it stays in proportion on a phone rather than staying put while the card shrinks. 100 is 8px on a desktop; 0 is square corners.",
+      "info": "A multiple of the widget's standard spacing; 100 is 8px on a desktop, and 0 is square corners.",
       "min": 0,
       "max": 400,
       "step": 25,
       "unit": "x",
       "default": 100
+    },
+    {
+      "type": "select",
+      "id": "arrow_position",
+      "label": "Scroll arrows",
+      "info": "Where the arrows sit under the row. The row can always be swiped or dragged, whichever you choose.",
+      "options": [
+        { "value": "hidden", "label": "Hidden" },
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "range",
+      "id": "arrow_scale",
+      "label": "Arrow size",
+      "info": "A multiple of the widget's standard spacing, so the arrows scale down on phones along with everything else.",
+      "min": 200,
+      "max": 1000,
+      "step": 50,
+      "unit": "x",
+      "default": 400
     },
     {
       "type": "header",
@@ -149,7 +189,7 @@
       "type": "select",
       "id": "preview_mode",
       "label": "Card preview",
-      "info": "Videos autoplay muted while the card is on screen. Images fetch nothing but the poster, which matters more here than in any other layout — a grid can put twenty clips on screen at once. Opening a card plays the full video either way.",
+      "info": "Videos autoplay muted while the card is on screen. Images fetch nothing but the poster. Opening a card plays the full video either way.",
       "options": [
         { "value": "video", "label": "Playing video" },
         { "value": "image", "label": "Still image" }
@@ -160,15 +200,15 @@
       "type": "checkbox",
       "id": "lazy_load",
       "label": "Load cards only when user interact",
-      "info": "On, nothing is downloaded until the shopper moves, taps or scrolls, and each card then waits until it is on screen. Turn it off only for a short grid near the top of the page — on a long one it fetches every clip at once.",
+      "info": "On, nothing is downloaded until the shopper moves, taps or scrolls, and each card then waits until it is on screen. A product row usually sits below the fold, which is exactly where this pays.",
       "default": true
     },
     {
       "type": "checkbox",
       "id": "sticker_on_preview",
       "label": "Show product sticker on the cards",
-      "info": "The product badge over each video in the grid. The full-screen player is set separately, below.",
-      "default": true
+      "info": "The product badge over each video. These cards are small, so the badge is at its least readable here — the full-screen player is set separately, below.",
+      "default": false
     },
     {
       "type": "header",

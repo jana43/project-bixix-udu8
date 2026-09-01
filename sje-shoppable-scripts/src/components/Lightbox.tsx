@@ -19,6 +19,8 @@ import { posterOf, type SJEMedia } from "../lib/sje";
 import { Portal } from "../lib/portal";
 import { useElementWidth } from "../lib/useElementWidth";
 import { ChevronLeft, ChevronRight, ChevronUp, Play, Volume2, VolumeX, X } from "../lib/icons";
+import { NBSP, NOT_EMPTY } from "../lib/notEmpty";
+import { useMedia } from "../lib/useMedia";
 import { BASE_SPACING, fs, sp, SPACING_VAR, useTokenPx } from "../lib/tokens";
 import { Sticker } from "./Sticker";
 import { ProductRail } from "./ProductRail";
@@ -64,8 +66,31 @@ const GUTTER = sp(2);
 /** Twice the gutter, for the stage's `100vw` sum. */
 const GUTTER_X2 = sp(4);
 
-/** Half a control, for the `marginTop` that centres one on an edge. */
-const CONTROL_STEPS = 5;
+/**
+ * The mute and close buttons — `* 6`, so 48px on desktop and 36px on a phone.
+ *
+ * Up from `* 5`. On a full-bleed phone player these two are the ONLY chrome
+ * left: the arrows are hidden on touch and there is no longer a gutter to
+ * separate them from the video, so they have to hold their own against
+ * whatever frame happens to be behind them. 36px also clears the 24px pointer
+ * minimum with room to spare, which `* 5` at 30px did not.
+ */
+const CONTROL_STEPS = 6;
+
+/** The glyph inside one, at half its diameter. */
+const CONTROL_ICON = sp(3);
+
+/**
+ * How far the controls sit from the edge.
+ *
+ * ⚠️ NOT `GUTTER`, which they used to share. The gutter goes to zero on a
+ * phone so the video can reach the edges; the controls must not go with it,
+ * or the close button ends up under the browser's own chrome and half off the
+ * screen. `env(safe-area-inset-*)` is what keeps it clear of a notch, and
+ * resolves to `0px` on everything that has none.
+ */
+const CONTROL_INSET = `max(${sp(2)}, env(safe-area-inset-top, 0px))`;
+const CONTROL_INSET_X = `max(${sp(2)}, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))`;
 
 /**
  * How far a finger must travel before it is a swipe and not a shaky tap, in
@@ -246,41 +271,6 @@ function Neighbour({ media, slot, frameWidth, live, products }: NeighbourProps) 
 }
 
 /**
- * A media query, as a boolean that keeps itself current.
- *
- * ⚠️ Never `(max-width: 749px)`. The breakpoint lives in `sje-widget.css` and
- * nowhere else, and `useTokenPx` is how this side asks about it — CLAUDE.md
- * §3. This hook is for the questions a token cannot answer.
- *
- * Read synchronously on the first render rather than in an effect, because the
- * swipe hint has to decide whether to appear before anything is painted.
- */
-function useMedia(query: string): boolean {
-  const [matches, setMatches] = useState(
-    () => typeof matchMedia === "function" && matchMedia(query).matches,
-  );
-
-  useEffect(() => {
-    if (typeof matchMedia !== "function") return;
-
-    const list = matchMedia(query);
-    const read = () => setMatches(list.matches);
-    read();
-
-    // Safari did not have `addEventListener` on a MediaQueryList until 14.
-    if (list.addEventListener) {
-      list.addEventListener("change", read);
-      return () => list.removeEventListener("change", read);
-    }
-
-    list.addListener(read);
-    return () => list.removeListener(read);
-  }, [query]);
-
-  return matches;
-}
-
-/**
  * Whether this is a touch device — NOT whether the viewport is narrow.
  *
  * `(pointer: coarse)` and not the spacing token, deliberately. The two
@@ -420,6 +410,22 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
   /** Swiped past the last video, and on its way out. */
   const leaving = glide?.step === "close";
 
+  /**
+   * Whether to give the video the whole screen.
+   *
+   * Read off the SPACING TOKEN rather than a media query, because the
+   * breakpoint lives in `sje-widget.css` and nowhere else — CLAUDE.md §3. The
+   * token is 8px above it and 6px below, so a value under the desktop base
+   * means the stylesheet's own media query has fired. A sheet that fails to
+   * load leaves the fallback at 8 and the desktop layout, which is the right
+   * way to be wrong.
+   *
+   * NOT `(pointer: coarse)`, which the swipe and the arrows use. That asks
+   * what the shopper is pointing WITH; this asks how much room there is, and
+   * a desktop window dragged narrow wants the full-bleed treatment too.
+   */
+  const fullBleed = spacing < BASE_SPACING;
+
   const [hint, setHint] = useState(false);
 
   const [paused, setPaused] = useState(false);
@@ -434,7 +440,16 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
    * live: the first flips the instant the video stalls, the second only if it
    * is still stalled a moment later.
    */
-  const [stalled, setStalled] = useState(false);
+  //
+  // ⚠️ Starts TRUE, and that is the fix for the case this first missed.
+  // `waiting` fires when playback STOPS for want of data — so it says nothing
+  // at all about a video that has not started yet. Open the player on a slow
+  // connection and the element sits at `readyState: 0` with no event to
+  // announce it: no `waiting`, no spinner, just a poster and a wait. Beginning
+  // stalled and clearing on `canplay` covers the opening as well as the
+  // stutters, and the 250ms delay below is what keeps a cached video from
+  // flashing one on the way past.
+  const [stalled, setStalled] = useState(true);
   const [spinner, setSpinner] = useState(false);
 
   useEffect(() => {
@@ -517,9 +532,10 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
   useEffect(() => {
     setPaused(false);
     setProgress(0);
-    // The outgoing video's buffering is not the incoming one's. Without this,
-    // moving off a stalled video carries its spinner onto the next.
-    setStalled(false);
+    // TRUE, not false: the next video starts from nothing buffered exactly as
+    // the first one did. Clearing here would leave a swipe onto an unbuffered
+    // video with no spinner at all, which is the same gap as the opening.
+    setStalled(true);
     // The sheet belongs to the video it was opened from. Carrying it across
     // would leave the previous video's products over the next one's frame.
     setSheet(null);
@@ -539,6 +555,13 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
   const applyPlayback = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
+
+    // Belt and braces for a video the browser already has. `canplay` may have
+    // fired before Preact attached the handler — a cached clip, or one the
+    // carousel behind was already playing — and nothing would clear the
+    // opening `stalled` then. `HAVE_FUTURE_DATA` is the same readiness that
+    // event announces.
+    if (video.readyState >= 3) setStalled(false);
 
     video.muted = muted;
 
@@ -755,7 +778,10 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: GUTTER,
+          // No gutter on a phone: the scrim around a 9:16 video on a 9:20
+          // screen is already most of what is showing, and framing it further
+          // makes the player look like a dialog rather than a video.
+          padding: fullBleed ? 0 : GUTTER,
           boxSizing: "border-box",
           // The theme's typeface, not ours. This renders into `<body>` (see
           // `lib/portal.tsx`), so it inherits whatever the theme set there,
@@ -800,10 +826,28 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           }}
           style={{
             position: "relative",
-            height: `min(100%, calc((100vw - ${GUTTER_X2}) * 16 / 9))`,
-            aspectRatio: "9 / 16",
-            maxWidth: "100%",
-            borderRadius: sp(1.5),
+            // ── Two shapes ──
+            //
+            // On a desktop the stage is a 9:16 box: the height is the smaller
+            // of the room available and the height that ratio may be before
+            // it is wider than the room available, with no reliance on how a
+            // browser clamps `aspect-ratio` against `max-width`.
+            //
+            // On a phone it is simply the screen. A 9:16 box on a 9:20 handset
+            // leaves a band of scrim top and bottom, which is what made the
+            // player read as a page with a video on it rather than as a
+            // video. Stated as `100%` of a dialog that is itself `100%` of
+            // the viewport, so it follows the browser's chrome appearing and
+            // disappearing without a `100vh` that does not.
+            ...(fullBleed
+              ? { width: "100%", height: "100%" }
+              : {
+                  height: `min(100%, calc((100vw - ${GUTTER_X2}) * 16 / 9))`,
+                  aspectRatio: "9 / 16",
+                  maxWidth: "100%",
+                }),
+            // A radius needs a corner to sit in, and full bleed has none.
+            borderRadius: fullBleed ? 0 : sp(1.5),
             overflow: "hidden",
             background: "#000",
             cursor: "pointer",
@@ -880,14 +924,40 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               // The browser's own controls are the wrong furniture here, and on
               // iOS they carry a fullscreen button that leaves the overlay.
               controls={false}
-              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+              style={{
+                width: "100%",
+                height: "100%",
+                // ⚠️ `cover` only when the stage is the whole screen, and it
+                // is the price of asking for full bleed. A 9:16 clip on a 9:20
+                // handset cannot fill the screen and stay whole: `contain`
+                // would letterbox it — which is the banding full bleed exists
+                // to remove — so it is scaled up and cropped instead, the way
+                // every reels player does it.
+                //
+                // The cost is real and worth knowing: the product badge is
+                // positioned as a percentage of the STAGE, and the stage is
+                // now the screen rather than the video's own 9:16 frame. On a
+                // tall handset the crop shifts the footage under it by a few
+                // percent, so a badge the merchant lined up against something
+                // in the shot sits slightly off it. The badge is a hotspot,
+                // not an annotation, and its default is a corner placement
+                // that nothing in the frame anchors — but a merchant who has
+                // pinned one precisely will see the drift.
+                objectFit: fullBleed ? "cover" : "contain",
+                display: "block",
+              }}
             />
           ) : (
             poster && (
               <img
                 src={poster}
                 alt={media.title || ""}
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: fullBleed ? "cover" : "contain",
+                  display: "block",
+                }}
               />
             )
           )}
@@ -994,8 +1064,15 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
                   borderTopColor: "#fff",
                   borderRadius: "50%",
                   boxSizing: "border-box",
+                  // ⚠️ THIS is why the spinner never appeared. A ring drawn
+                  // entirely from a border has no children, and a theme's
+                  // `div:empty { display: none }` hides it — every style on
+                  // it correct, and nothing on the screen. See `notEmpty.ts`.
+                  ...NOT_EMPTY,
                 }}
-              />
+              >
+                {NBSP}
+              </div>
             </div>
           )}
 
@@ -1098,7 +1175,17 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
                 pointerEvents: "none",
               }}
             >
-              <div style={{ width: `${progress * 100}%`, height: "100%", background: "#fff" }} />
+              {/* Empty but for the space: the same rule as the spinner. */}
+              <div
+                style={{
+                  width: `${progress * 100}%`,
+                  height: "100%",
+                  background: "#fff",
+                  ...NOT_EMPTY,
+                }}
+              >
+                {NBSP}
+              </div>
             </div>
           )}
 
@@ -1119,7 +1206,13 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
             never also a tap on the video. */}
         <div
           onClick={(event) => event.stopPropagation()}
-          style={{ position: "absolute", top: GUTTER, right: GUTTER, display: "flex", gap: sp(1) }}
+          style={{
+            position: "absolute",
+            top: CONTROL_INSET,
+            insetInlineEnd: CONTROL_INSET_X,
+            display: "flex",
+            gap: sp(1),
+          }}
         >
           {source && (
             <button
@@ -1128,11 +1221,11 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               aria-label={muted ? "Unmute" : "Mute"}
               style={BUTTON}
             >
-              {muted ? <VolumeX /> : <Volume2 />}
+              {muted ? <VolumeX size={CONTROL_ICON} /> : <Volume2 size={CONTROL_ICON} />}
             </button>
           )}
           <button type="button" onClick={onClose} aria-label="Close" style={BUTTON}>
-            <X />
+            <X size={CONTROL_ICON} />
           </button>
         </div>
 
@@ -1148,9 +1241,15 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               goPrev();
             }}
             aria-label="Previous video"
-            style={{ ...BUTTON, position: "absolute", left: GUTTER, top: "50%", marginTop: sp(CONTROL_STEPS / -2) }}
+            style={{
+              ...BUTTON,
+              position: "absolute",
+              insetInlineStart: CONTROL_INSET_X,
+              top: "50%",
+              marginTop: sp(CONTROL_STEPS / -2),
+            }}
           >
-            <ChevronLeft />
+            <ChevronLeft size={CONTROL_ICON} />
           </button>
         )}
 
@@ -1162,9 +1261,15 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               goNext();
             }}
             aria-label="Next video"
-            style={{ ...BUTTON, position: "absolute", right: GUTTER, top: "50%", marginTop: sp(CONTROL_STEPS / -2) }}
+            style={{
+              ...BUTTON,
+              position: "absolute",
+              insetInlineEnd: CONTROL_INSET_X,
+              top: "50%",
+              marginTop: sp(CONTROL_STEPS / -2),
+            }}
           >
-            <ChevronRight />
+            <ChevronRight size={CONTROL_ICON} />
           </button>
         )}
       </dialog>

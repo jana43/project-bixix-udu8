@@ -16,14 +16,15 @@
 
    ⚠️ Every read of these carries the fallback literal —
    `var(--sje-standard-spacing, 8px)`, never bare `var(--sje-standard-spacing)`.
-   This sheet has failed to load on the storefront before (see the note in
-   `snippets/sje-widget.liquid`), and an undefined custom property makes the
+   This sheet has failed to load on the storefront before — twice — and an
+   undefined custom property makes the
    whole `calc()` invalid, which would collapse the widget to nothing. With the
    fallback, a sheet that never arrives costs only the mobile step-down.
 
-   Component geometry — card heights, the story circle, the bubble, the grid
-   track — is derived from the spacing token as well, so a card is `* 30` and a
-   story circle is `* 9`. The multipliers are large and not round, and that is
+   Component geometry — card heights, the story circle, the bubble — is derived
+   from the spacing token as well, so a card is `* 30` and a story circle is
+   `* 9`. How many cards go ACROSS is the one thing that is not, and cannot be;
+   see `--sje-across-count` below. The multipliers are large and not round, and that is
    fine: they are exact against the desktop base, so nothing shifts there, and
    the whole layout steps down together on a phone.
 
@@ -32,6 +33,55 @@
 :root {
   --sje-standard-font-size: 14px;
   --sje-standard-spacing: 8px;
+
+  /* ── A third token, and the only one ──
+
+     CLAUDE.md §3 says every size in this extension is a multiple of one of the
+     two above. This is the documented exception, and it exists because the
+     story circle is the one thing here that must move the OTHER WAY at the
+     breakpoint.
+
+     Everything else steps DOWN on a phone: there is less room, so the chrome
+     tightens to leave more of it for content. A story circle is not chrome —
+     it IS the content, and it is already the smallest thing this extension
+     draws. Taking 72px down to 54px does not tidy a phone screen up, it makes
+     the thumbnails harder to make out on the device with the worst viewing
+     conditions and the least precise pointer. A phone does not make faces
+     smaller.
+
+     So this one goes UP: 8px to 9px, which puts the default circle at 72px on
+     desktop and 81px on a phone. The ring scales from the same token, so it
+     stays in proportion rather than thinning as the circle grows.
+
+     ⚠️ Read in THREE places, all of which must agree or the skeleton and the
+     real row will disagree on a phone: `--sje-story-unit` here, the story
+     bone in `snippets/sje-mount.liquid`, and `BASE_STORY_UNIT` in
+     `sje-shoppable-scripts/src/lib/tokens.ts`. */
+  --sje-story-unit: 8px;
+
+  /* ── The sticker's labels, which also step UP ──
+
+     Second and last exception, for the same reason as `--sje-story-unit`
+     above: the price and the "+N" on a product badge are content, not chrome,
+     and they are already the smallest text this extension draws. At the
+     standard scale a phone took the price to about 5px, which is a grey smudge
+     rather than a number.
+
+     The badge's SIZE is deliberately not in here. That comes from
+     `sticker.size`, a percentage of the video frame set per-video in the app,
+     and it must stay exactly what the merchant placed in the position editor.
+     Only the type inside it changes.
+
+     The weight steps up too, and for a reason particular to a phone: the badge
+     sits on moving video at a size where a 600 face starts losing its edges to
+     the compression, and there is no hinting to lean on at 7px. 700 holds.
+
+     ⚠️ Read in TWO places that must agree — here, and `BASE_STICKER_FONT` /
+     `BASE_STICKER_WEIGHT` in `sje-shoppable-scripts/src/lib/tokens.ts`. The
+     ADMIN's `StickerBadge.tsx` mirrors the DESKTOP values only; it has no
+     breakpoint, because it is a desktop editor. */
+  --sje-sticker-font-size: 14px;
+  --sje-sticker-font-weight: 600;
 }
 
 /* ── Break out of the theme's `.page-width` container ──
@@ -93,6 +143,37 @@
   width: 98%;
 }
 
+/* ── How many cards go across ──
+
+   The third and last thing in this extension that answers the breakpoint with
+   a value of its own rather than by deriving from a token — and it is on that
+   list for a different reason from `--sje-story-unit` and the sticker's type.
+   Those two are lengths that happen to move the wrong way. This is not a
+   length at all: a COUNT cannot be a multiple of the spacing token, cannot
+   step down by 25% with everything else, and there is no arithmetic that
+   turns "four across on a desktop" into "two across on a phone". That is a
+   judgement, and it is the merchant's to make twice.
+
+   ⚠️ ONE mechanism, TWO layouts, and deliberately not two mechanisms. The
+   grid means "columns in a wrapping grid" and the product row means "cards
+   visible before the row scrolls" — different sentences, identical problem,
+   so they share a name. A second near-identical trio of variables would make
+   the paragraph above a lie in one of its two copies.
+
+   The block writes both of the merchant's answers onto the wrapper inline, as
+   `--sje-across-desktop` and `--sje-across-mobile`, and this picks between
+   them. The fallbacks here match the schemas' defaults, for a block saved
+   before these settings existed.
+
+   ⚠️ Nothing that READS this carries a bare `var(--sje-across-count)`. The
+   skeleton and both components write the merchant's desktop count as the
+   fallback, so a sheet that fails to load costs the mobile count and nothing
+   else — the same bargain as every other token here (CLAUDE.md §3). */
+.sje-widget--grid,
+.sje-widget--product-videos {
+  --sje-across-count: var(--sje-across-desktop, 4);
+}
+
 /* 750px is the breakpoint Shopify's own themes use for this. */
 @media screen and (max-width: 749px) {
   /* The whole of the extension's responsive typography and spacing, in two
@@ -105,6 +186,11 @@
   :root {
     --sje-standard-font-size: 12px;
     --sje-standard-spacing: 6px;
+
+    /* Up, not down. See the notes beside their declarations. */
+    --sje-story-unit: 9px;
+    --sje-sticker-font-size: 16px;
+    --sje-sticker-font-weight: 700;
   }
 
   .sje-widget--pad-large {
@@ -117,6 +203,22 @@
 
   .sje-widget--pad-none {
     width: 99%;
+  }
+
+  /* The merchant's other answer. See the note beside the desktop
+     declaration for why a count is not derived. */
+  .sje-widget--grid,
+  .sje-widget--product-videos {
+    --sje-across-count: var(--sje-across-mobile, 2);
+  }
+
+  /* The floating bubble's `show_on_mobile`, and the only styling that layout
+     takes from this file — everything else about it is inline, in
+     `Bubble.tsx`. It is here because "is this a phone" IS the breakpoint, and
+     a `style` attribute cannot carry a media query. The class is applied only
+     when the merchant turned the setting off. */
+  .sje-bubble--desktop-only {
+    display: none;
   }
 }
 
@@ -181,16 +283,41 @@
 }
 
 /* One row the shopper scrolls sideways. */
-.sje-widget--carousel .sje-widget__items,
-.sje-widget--stacked .sje-widget__items {
+/* ⚠️ The stacked layout is NOT in here any more. It was a scrolling row of
+   `clamp()`-width cards while it was a Liquid skeleton; it is now a deck with
+   one card in front and the rest transformed behind it, and a `display: flex`
+   with `overflow-x: auto` on its stage would fight every one of those
+   transforms. See `Stacked.tsx`. */
+.sje-widget--carousel .sje-widget__items {
   display: flex;
   align-items: flex-start;
   gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
   overflow-x: auto;
 }
 
-.sje-widget--stacked .sje-widget__item {
-  flex: 0 0 clamp(calc(var(--sje-standard-spacing, 8px) * 17.5), 22vw, calc(var(--sje-standard-spacing, 8px) * 27.5));
+/* ── The stacked deck ──
+
+   A fixed group height, exactly as the carousel has one and for the same
+   reason: the cards are 9:16 and take their WIDTH from it, so something has to
+   state a height or the ratio has nothing to resolve against. The deck fills
+   what the heading leaves. */
+/* ⚠️ No height here, unlike the carousel.
+
+   The carousel is a group of a stated height that the row is a slice of, so
+   its cards end up shorter than the 70vh by whatever the heading and the arrow
+   strip take. That is fine for a row.
+
+   A deck is one card with company, and the front card's height is the thing
+   the merchant actually sees — so the STAGE states it (80vh, in `Stacked.tsx`
+   and the skeleton) and the widget is however tall that plus its heading comes
+   to. Putting a height here as well would take the same bite out of it twice. */
+.sje-widget--stacked {
+  display: flex;
+  flex-direction: column;
+}
+
+.sje-widget--stacked .sje-widget__heading {
+  flex: 0 0 auto;
 }
 
 /* ── Carousel: a fixed 70vh group of 9:16 cards ──
@@ -229,32 +356,56 @@
   aspect-ratio: 9 / 16;
 }
 
-/* Every video at once. */
+/* ── Grid: every video at once, in rows that wrap ──
+
+   ⚠️ This was `repeat(auto-fill, minmax(calc(<spacing> * 20), 1fr))` — a
+   160px track that became 120px on a phone, so the column count fell out of
+   the spacing token and no merchant setting was needed. It is gone because
+   the arithmetic ran the wrong way: a SMALLER track means MORE columns, so
+   the phone got three videos across where the desktop got two on a narrow
+   section. The count is a merchant setting now; see `--sje-across-count`
+   above.
+
+   The cards can use `aspect-ratio` here, unlike the carousel's row, because
+   their width is DEFINITE: it comes from a track, so the ratio has a real
+   number to derive the height from. That is the exception CLAUDE.md §6 allows
+   for, and it is why nothing in this layout states a height. */
 .sje-widget--grid .sje-widget__items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--sje-standard-spacing, 8px) * 20), 1fr));
+  grid-template-columns: repeat(var(--sje-across-count, 4), minmax(0, 1fr));
   gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
 }
 
-/* Uneven columns, packed. */
-.sje-widget--masonry .sje-widget__items {
-  /* Written long-hand, not as the `columns` shorthand: the shorthand parses
-     `<column-width> || <column-count>` positionally, and a `calc()` in that
-     position is where browsers disagree. */
-  column-count: 4;
-  column-width: calc(var(--sje-standard-spacing, 8px) * 20);
-  column-gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
+/* ── The product row ──
+
+   A card is a fraction of the ROW, not a ratio against a stated height — the
+   opposite way round from the carousel, and the reason this layout fits a
+   product column at any width. The width itself is written inline by
+   `ProductVideos.tsx` and by the skeleton, because it depends on the
+   merchant's `--sje-across-count`; all that is left for the sheet is undoing
+   the bone height, exactly as the grid does below. */
+.sje-widget--product-videos .sje-widget__items {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--sje-standard-spacing, 8px) * 1.5);
+  overflow-x: auto;
 }
 
-.sje-widget--masonry .sje-widget__item {
-  aspect-ratio: auto;
-  height: calc(var(--sje-standard-spacing, 8px) * 27.5);
-  margin-block-end: calc(var(--sje-standard-spacing, 8px) * 1.5);
-  break-inside: avoid;
+.sje-widget--product-videos .sje-widget__item {
+  flex: 0 0 auto;
+  height: auto;
+  aspect-ratio: 9 / 16;
 }
 
-.sje-widget--masonry .sje-widget__item:nth-child(even) {
-  height: calc(var(--sje-standard-spacing, 8px) * 18.75);
+.sje-widget--grid .sje-widget__item {
+  width: 100%;
+  /* ⚠️ Undoes the 30-spacing height `.sje-widget__item` states above. That
+     one exists because a bone in a flex row cannot get a height any other
+     way; here the width is definite and the ratio supplies it — but with
+     BOTH dimensions definite, `aspect-ratio` is ignored and every bone would
+     be 240px tall whatever its column. Same override as the carousel's. */
+  height: auto;
+  aspect-ratio: 9 / 16;
 }
 
 /* Circles, like a story bar. */
@@ -273,24 +424,31 @@
   border-radius: 50%;
 }
 
-/* A single player pinned to the corner of the page. */
-.sje-widget--floating-bubble .sje-widget__items {
-  position: fixed;
-  inset-inline-end: calc(var(--sje-standard-spacing, 8px) * 2);
-  inset-block-end: calc(var(--sje-standard-spacing, 8px) * 2);
-  z-index: 5;
-}
+/* ── The floating bubble ──
 
-.sje-widget--floating-bubble .sje-widget__item {
-  width: calc(var(--sje-standard-spacing, 8px) * 12);
-  height: calc(var(--sje-standard-spacing, 8px) * 12);
-  border-radius: 50%;
-}
+   One rule, and it is here only because it cannot be anywhere else.
 
-/* The bubble shows one video at a time, whatever the widget holds. */
-.sje-widget--floating-bubble .sje-widget__item:not(:first-child) {
-  display: none;
-}
+   ⚠️ Everything about the bubble — its corner, its size, its shape, its
+   offset, its stacking order — is written INLINE by `Bubble.tsx`, which
+   renders into `<body>` through a portal. This is the single exception:
+   `show_on_mobile` asks whether this is a phone, that is the breakpoint, the
+   breakpoint lives in this file and nowhere else (CLAUDE.md §3), and a
+   `style` attribute cannot carry a media query.
+
+   The class is applied only when the merchant turned the setting OFF, so a
+   stylesheet that fails to load leaves the bubble showing on a phone rather
+   than hiding it everywhere — the mildest way for this to be wrong.
+
+   The three `.sje-widget--floating-bubble` rules that used to sit here are
+   gone with the skeleton they styled. No block renders that layout through
+   `sje-widget` any more, and the `z-index: 5` they carried was too low to
+   clear a theme's sticky header anyway; `LAYER` in `Bubble.tsx` replaces it
+   with a reasoned number.
+
+   The rule itself is up in the ONE breakpoint block this file has, beside the
+   `--pad-*` widths and the grid's column count. A second `@media (max-width:
+   749px)` down here would be a second place to change the breakpoint, which
+   is the thing CLAUDE.md §3 is protecting. */
 
 /* ── The carousel's row scrolls, without saying so ──
 
