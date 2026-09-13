@@ -1,5 +1,8 @@
 {%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
 {%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
+{%- assign sje_plan = app.metafields.shoppable_videos_plan.entitlements.value -%}
+{%- assign sje_live = sje_widget.media | reject: 'deactivated', true | reject: 'enabled', false -%}
+{%- assign sje_locked = true -%}{%- if sje_plan.layouts contains 'carousel' -%}{%- assign sje_locked = false -%}{%- endif -%}
 {%- assign sje_sp = 'var(--sje-standard-spacing, 8px)' -%}
 {%- if block.settings.widget_id == blank -%}
   {% render 'sje-notice' %}
@@ -7,7 +10,11 @@
   {% render 'sje-notice', reason: 'not-found', widget_id: block.settings.widget_id %}
 {%- elsif sje_widget.enabled == false -%}
   {% render 'sje-notice', reason: 'off', name: sje_widget.name %}
-{%- elsif sje_widget.media.size == 0 -%}
+{%- elsif sje_locked -%}
+  {% render 'sje-notice', reason: 'locked', name: sje_widget.name %}
+{%- elsif sje_widget.deactivated -%}
+  {% render 'sje-notice', reason: 'paused', name: sje_widget.name %}
+{%- elsif sje_live.size == 0 -%}
   {% render 'sje-notice', reason: 'empty', name: sje_widget.name %}
 {%- else -%}
   <div
@@ -17,9 +24,10 @@
     {%- if block.settings.show_heading != false -%}
       {% render 'sje-heading', text: sje_widget.name, settings: block.settings, flex: true %}
     {%- endif -%}
-    <div style="flex:1 1 auto;min-height:0;">
+    <div class="sje-carousel__mount" style="flex:1 1 auto;min-height:0;">
       {% render 'sje-mount',
         layout: 'carousel',
+        media: sje_live,
         script: 'sje-carousel.js',
         widget_id: block.settings.widget_id,
         widget: sje_widget,

@@ -37,6 +37,7 @@ import {
   widgetMedia,
   type SJEMedia,
 } from "../lib/sje";
+import { useVideoImpression } from "../lib/analytics";
 import { observeInView } from "../lib/inView";
 import { useHold, usePlaybackFrozen } from "../lib/playback";
 import { useLiveProducts } from "../lib/products";
@@ -182,6 +183,11 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
     });
   }, [plays]);
 
+  // `inView`, not `seen`: the impression is the card being on screen, and with
+  // lazy loading off `seen` starts true for every card in the widget whether
+  // the shopper ever scrolled to it or not.
+  useVideoImpression(media.id, inView);
+
   useEffect(() => {
     const video = videoRef.current;
     // Null in still mode — there is no element, so there is nothing to drive.
@@ -209,6 +215,7 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
 
   return (
     <div
+      class="sje-story"
       ref={rootRef}
       // A real button, not a div with a click handler: this is the one thing
       // a shopper can do here, and it should be reachable by keyboard and
@@ -256,6 +263,7 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
           degrading. A ring nobody can see is worth less than a ring without a
           gap. */}
       <div
+        class="sje-story__ring"
         style={{
           position: "relative",
           width: size,
@@ -270,6 +278,7 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
         }}
       >
         <div
+          class="sje-story__photo"
           style={{
             position: "relative",
             width: "100%",
@@ -281,6 +290,7 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
         >
           {poster && (
             <img
+              class="sje-story__poster"
               src={poster}
               alt={media.title || ""}
               loading={lazy ? "lazy" : "eager"}
@@ -290,6 +300,7 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
 
           {plays && seen && (
             <video
+              class="sje-story__video"
               ref={videoRef}
               src={preview!}
               poster={poster}
@@ -319,6 +330,7 @@ function Story({ media, size, ring, paint, frozen, mode, lazy, title, onOpen }: 
 
       {title && media.title && (
         <div
+          class="sje-story__caption"
           style={{
             // Allowed to be a little wider than the circle, because a name
             // cropped to a 72px circle is two syllables. Not much wider: the
@@ -421,7 +433,7 @@ export function Stories({ widget, settings }: WidgetProps) {
   const paint = ringPaint(settings.ringStyle, settings.ringFrom, settings.ringTo);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div class="sje-stories" style={{ display: "flex", flexDirection: "column" }}>
       <div
         ref={scrollerRef}
         // The class carries one thing only: the WebKit scrollbar rule, which
@@ -435,7 +447,7 @@ export function Stories({ widget, settings }: WidgetProps) {
         // circle is a better "there is more this way" than a scrollbar is.
         // `safe center` above is what guarantees that — a centred row that
         // overflows falls back to the start rather than hiding both ends.
-        class="sje-scroller"
+        class="sje-stories__row sje-scroller"
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -469,6 +481,7 @@ export function Stories({ widget, settings }: WidgetProps) {
           index={open}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           onIndex={setOpenAt}
           onClose={() => setOpenAt(null)}
         />

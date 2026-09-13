@@ -1,14 +1,20 @@
 {%- assign sje_key = 'widget_' | append: block.settings.widget_id -%}
 {%- assign sje_widget = app.metafields.shoppable_videos[sje_key].value -%}
+{%- assign sje_plan = app.metafields.shoppable_videos_plan.entitlements.value -%}
+{%- assign sje_live = sje_widget.media | reject: 'deactivated', true | reject: 'enabled', false -%}
+{%- assign sje_locked = true -%}{%- if sje_plan.layouts contains 'banner' -%}{%- assign sje_locked = false -%}{%- endif -%}
 {%- assign sje_sp = 'var(--sje-standard-spacing, 8px)' -%}
-{%- assign sje_fs = 'var(--sje-standard-font-size, 14px)' -%}
 {%- if block.settings.widget_id == blank -%}
   {% render 'sje-notice' %}
 {%- elsif sje_widget == blank -%}
   {% render 'sje-notice', reason: 'not-found', widget_id: block.settings.widget_id %}
 {%- elsif sje_widget.enabled == false -%}
   {% render 'sje-notice', reason: 'off', name: sje_widget.name %}
-{%- elsif sje_widget.media.size == 0 -%}
+{%- elsif sje_locked -%}
+  {% render 'sje-notice', reason: 'locked', name: sje_widget.name %}
+{%- elsif sje_widget.deactivated -%}
+  {% render 'sje-notice', reason: 'paused', name: sje_widget.name %}
+{%- elsif sje_live.size == 0 -%}
   {% render 'sje-notice', reason: 'empty', name: sje_widget.name %}
 {%- else -%}
   {%- assign sje_height = block.settings.banner_height | default: 60 -%}
@@ -48,43 +54,50 @@
   {%- assign sje_radius = block.settings.card_radius | default: 100 | divided_by: 100.0 -%}
   {%- assign sje_text = block.settings.text_color | default: '#ffffff' -%}
   {%- assign heading_mult = block.settings.heading_scale | default: 300 | divided_by: 100.0 -%}
+  {%- assign sje_bu = 'var(--sje-banner-unit, var(--sje-standard-font-size, 14px))' -%}
   <div
     class="sje-widget sje-widget--banner sje-widget--pad-{{ block.settings.padding | default: 'none' }}"
     style="position:relative;{{ sje_box }}overflow:hidden;background:{{ block.settings.banner_background | default: '#000000' }};border-radius:calc({{ sje_sp }} * {{ sje_radius }});margin:calc({{ sje_sp }} * 3) auto;"
   >
     {% render 'sje-mount',
       layout: 'banner',
+      media: sje_live,
       script: 'sje-banner.js',
       widget_id: block.settings.widget_id,
       widget: sje_widget,
       settings: block.settings
     %}
     <div
-      style="position:absolute;inset:0;display:flex;align-items:{{ sje_items }};justify-content:{{ sje_justify }};padding:calc({{ sje_sp }} * 4);background:rgba(0,0,0,{{ sje_scrim }});pointer-events:none;"
+      class="sje-banner__content"
+      style="position:absolute;inset:0;display:flex;align-items:{{ sje_items }};justify-content:{{ sje_justify }};padding:calc({{ sje_bu }} * 2);background:rgba(0,0,0,{{ sje_scrim }});pointer-events:none;"
     >
       <div
-        style="max-width:min({{ sje_measure }}, 100%);color:{{ sje_text }};text-align:{{ sje_align }};pointer-events:auto;"
+        class="sje-banner__copy"
+        style="max-width:min({{ sje_measure }}, 100%);font-size:{{ sje_bu }};color:{{ sje_text }};text-align:{{ sje_align }};pointer-events:auto;"
       >
         {%- if block.settings.subheading != blank -%}
           <p
-            style="margin:0 0 calc({{ sje_sp }} * 1);font-size:calc({{ sje_fs }} * 1);letter-spacing:0.08em;text-transform:uppercase;font-weight:600;opacity:0.85;"
+            class="sje-banner__subheading"
+            style="margin:0 0 calc({{ sje_bu }} * 0.6);font-size:calc({{ sje_bu }} * 0.95);letter-spacing:0.08em;text-transform:uppercase;font-weight:600;opacity:0.85;"
           >{{ block.settings.subheading }}</p>
         {%- endif -%}
         {%- if block.settings.heading != blank -%}
           <h2
-            class="sje-widget__heading"
-            style="--sje-heading-font-size:calc({{ sje_fs }} * {{ heading_mult }});margin:0 0 calc({{ sje_sp }} * 1.5);font-size:var(--sje-heading-font-size);line-height:1.15;color:inherit;"
+            class="sje-banner__heading sje-widget__heading"
+            style="--sje-heading-font-size:calc({{ sje_bu }} * {{ heading_mult }});margin:0 0 calc({{ sje_bu }} * 0.8);font-size:var(--sje-heading-font-size);line-height:1.15;color:inherit;"
           >{{ block.settings.heading }}</h2>
         {%- endif -%}
         {%- if block.settings.body != blank -%}
           <p
-            style="margin:0 0 calc({{ sje_sp }} * 2.5);font-size:calc({{ sje_fs }} * 1.15);line-height:1.5;"
+            class="sje-banner__body"
+            style="margin:0 0 calc({{ sje_bu }} * 1.5);font-size:calc({{ sje_bu }} * 1.1);line-height:1.5;"
           >{{ block.settings.body }}</p>
         {%- endif -%}
         {%- if block.settings.cta_text != blank and block.settings.cta_link != blank -%}
           <a
+            class="sje-banner__cta"
             href="{{ block.settings.cta_link }}"
-            style="display:inline-block;padding:calc({{ sje_sp }} * 1.5) calc({{ sje_sp }} * 3);border-radius:calc({{ sje_sp }} * 0.75);background:{{ block.settings.cta_background | default: '#ffffff' }};color:{{ block.settings.cta_text_color | default: '#111111' }};font-family:inherit;font-size:calc({{ sje_fs }} * 1);font-weight:600;line-height:1.4;text-decoration:none;"
+            style="display:inline-block;padding:calc({{ sje_bu }} * 0.8) calc({{ sje_bu }} * 1.7);border-radius:calc({{ sje_bu }} * 0.5);background:{{ block.settings.cta_background | default: '#ffffff' }};color:{{ block.settings.cta_text_color | default: '#111111' }};font-family:inherit;font-size:calc({{ sje_bu }} * 1);font-weight:600;line-height:1.4;text-decoration:none;"
           >{{ block.settings.cta_text }}</a>
         {%- endif -%}
       </div>

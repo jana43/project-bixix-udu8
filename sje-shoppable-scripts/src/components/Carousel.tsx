@@ -14,6 +14,7 @@
 // with theirs and their reset may undo ours. Inline wins both.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { widgetMedia, posterOf, previewUrlOf, type SJEMedia } from "../lib/sje";
+import { useVideoImpression } from "../lib/analytics";
 import { observeInView } from "../lib/inView";
 import { useElementWidth } from "../lib/useElementWidth";
 import { useHold, usePlaybackFrozen } from "../lib/playback";
@@ -103,6 +104,11 @@ function Card({ media, frozen, live, sticker, radius, onOpen }: CardProps) {
     });
   }, [preview]);
 
+  // `inView`, not `seen`: the impression is the card being on screen, and in
+  // layouts where lazy loading is off `seen` starts true for every card in the
+  // widget whether the shopper ever scrolled to it or not.
+  useVideoImpression(media.id, inView);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -130,6 +136,7 @@ function Card({ media, frozen, live, sticker, radius, onOpen }: CardProps) {
 
   return (
     <div
+      class="sje-carousel__card"
       ref={cardRef}
       // A real button, not a div with a click handler: this is the one thing
       // on the card a shopper can do, and it should be reachable by keyboard
@@ -157,10 +164,11 @@ function Card({ media, frozen, live, sticker, radius, onOpen }: CardProps) {
         WebkitTapHighlightColor: "transparent",
       }}
     >
-      {poster && <img src={poster} alt={media.title || ""} loading="lazy" style={FILL} />}
+      {poster && <img class="sje-carousel__poster" src={poster} alt={media.title || ""} loading="lazy" style={FILL} />}
 
       {preview && seen && (
         <video
+          class="sje-carousel__video"
           ref={videoRef}
           src={preview}
           poster={poster}
@@ -230,7 +238,7 @@ export function Carousel({ widget, settings }: WidgetProps) {
   const open = playerOpen ? openAt : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div class="sje-carousel" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div
         ref={rail.ref}
         // The class carries one thing only: the WebKit scrollbar rule, which
@@ -238,7 +246,7 @@ export function Carousel({ widget, settings }: WidgetProps) {
         // layout depends on stays in `style`, where the theme cannot reach it
         // — if the stylesheet fails to load, the row still works and only the
         // scrollbar comes back.
-        class="sje-scroller"
+        class="sje-carousel__row sje-scroller"
         style={{
           flex: "1 1 auto",
           // A flex item defaults to `min-height: auto` and refuses to shrink
@@ -285,6 +293,7 @@ export function Carousel({ widget, settings }: WidgetProps) {
           index={open}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           onIndex={setOpenAt}
           onClose={() => setOpenAt(null)}
         />

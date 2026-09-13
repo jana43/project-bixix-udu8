@@ -166,6 +166,14 @@ interface ProductSheetProps {
   media: SJEMedia;
   /** The view to show, or `null` to close — which plays the exit first. */
   state: SheetState | null;
+  /**
+   * Which placement the video is being played in.
+   *
+   * Threaded all the way down to the add-to-cart button, because that is where
+   * the cart attribution is written and the widget is half of what it credits.
+   * Optional so a caller without one still attributes the video.
+   */
+  widgetId?: string;
   /** A product was chosen from the list. */
   onSelect: (productId: string) => void;
   /** Back to the list. Only ever called while `stacked`. */
@@ -189,7 +197,14 @@ interface ProductSheetProps {
  * chance that a shopper might tap would put a request per tagged product on
  * every video opened.
  */
-export function ProductSheet({ media, state, onSelect, onBack, onClose }: ProductSheetProps) {
+export function ProductSheet({
+  media,
+  state,
+  widgetId,
+  onSelect,
+  onBack,
+  onClose,
+}: ProductSheetProps) {
   const [held, setHeld] = useState<SheetState | null>(state);
 
   useEffect(() => {
@@ -271,6 +286,7 @@ export function ProductSheet({ media, state, onSelect, onBack, onClose }: Produc
         <SheetBody
           media={media}
           state={shown}
+          widgetId={widgetId}
           onSelect={onSelect}
           onBack={onBack}
           onClose={onClose}
@@ -283,6 +299,7 @@ export function ProductSheet({ media, state, onSelect, onBack, onClose }: Produc
 function SheetBody({
   media,
   state,
+  widgetId,
   onSelect,
   onBack,
   onClose,
@@ -312,6 +329,7 @@ function SheetBody({
           suggests is not implemented, and a tap anywhere off the sheet does
           the same job. */}
       <div
+        class="sje-sheet__grabber"
         aria-hidden="true"
         style={{
           flex: "0 0 auto",
@@ -327,6 +345,7 @@ function SheetBody({
       </div>
 
       <div
+        class="sje-sheet__header"
         style={{
           flex: "0 0 auto",
           display: "flex",
@@ -339,12 +358,13 @@ function SheetBody({
         {/* Only when there is a list to go back TO. A rail card opened the
             detail directly, and a Back arrow there would point at nothing. */}
         {chosen && state.stacked && (
-          <button type="button" onClick={onBack} aria-label="Back to products" style={ICON_BUTTON}>
+          <button class="sje-sheet__back" type="button" onClick={onBack} aria-label="Back to products" style={ICON_BUTTON}>
             <ChevronLeft size={sp(2.25)} />
           </button>
         )}
 
         <div
+          class="sje-sheet__heading"
           style={{
             flex: "1 1 auto",
             minWidth: 0,
@@ -366,7 +386,7 @@ function SheetBody({
           {chosen ? chosen.title : `${tagged.length} product${tagged.length === 1 ? "" : "s"}`}
         </div>
 
-        <button type="button" onClick={onClose} aria-label="Close" style={ICON_BUTTON}>
+        <button class="sje-sheet__close" type="button" onClick={onClose} aria-label="Close" style={ICON_BUTTON}>
           <X size={sp(2.25)} />
         </button>
       </div>
@@ -390,9 +410,14 @@ function SheetBody({
         style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}
       >
         {chosen ? (
-          <Detail product={fresh ?? chosen} waiting={waiting} />
+          <Detail
+            product={fresh ?? chosen}
+            mediaId={media.id}
+            widgetId={widgetId}
+            waiting={waiting}
+          />
         ) : (
-          <div style={SCROLLER}>
+          <div class="sje-sheet__list" style={SCROLLER}>
             {tagged.map((product) => (
               <ListRow
                 key={product.id}
@@ -419,6 +444,7 @@ interface ListRowProps {
 function ListRow({ product, waiting, onOpen }: ListRowProps) {
   return (
     <button
+      class="sje-sheet__row"
       type="button"
       onClick={onOpen}
       style={{
@@ -442,8 +468,9 @@ function ListRow({ product, waiting, onOpen }: ListRowProps) {
 
       {/* `min-width: 0` is what lets the ellipsis engage: without it a flex
           item refuses to shrink below its text's natural width. */}
-      <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+      <div class="sje-sheet__row-text" style={{ flex: "1 1 auto", minWidth: 0 }}>
         <div
+          class="sje-sheet__row-title"
           style={{
             fontSize: fs(0.95),
             lineHeight: 1.3,
@@ -471,6 +498,17 @@ function ListRow({ product, waiting, onOpen }: ListRowProps) {
 
 interface DetailProps {
   product: SJEProduct;
+  /**
+   * The video this product was opened from.
+   *
+   * Threaded down purely for analytics: an add-to-cart is only interesting
+   * because of WHICH video produced it, and this is the last component that
+   * still knows. It is also what the cart attribute credits the eventual
+   * checkout to — see `lib/cart.ts`.
+   */
+  mediaId: string;
+  /** The placement it was played in, credited alongside the video. */
+  widgetId?: string;
   /** The store has not answered yet — there are no variants to offer. */
   waiting: boolean;
 }
@@ -485,7 +523,7 @@ interface DetailProps {
  * with none, and there is no option matrix to keep in sync with what is
  * actually in stock. A product with one variant gets no picker at all.
  */
-function Detail({ product, waiting }: DetailProps) {
+function Detail({ product, mediaId, widgetId, waiting }: DetailProps) {
   const variants = product.variants ?? [];
 
   const [chosenId, setChosenId] = useState<number | null>(null);
@@ -547,7 +585,16 @@ function Detail({ product, waiting }: DetailProps) {
     setAdding(true);
     setError(null);
 
-    const result = await addToCart(variant.id);
+    // The video and product travel with the request: the cart attribute is
+    // written in the same round trip, and the counter is only recorded on a
+    // genuine success. A refusal — sold out, over the inventory — is not an
+    // add-to-cart and must not be counted as one.
+    const result = await addToCart(variant.id, 1, {
+      mediaId,
+      widgetId,
+      productId: product.id,
+      value: Number(priced?.price?.amount ?? 0),
+    });
 
     setAdding(false);
     if (result.ok) setConfirmed((count) => count + 1);
@@ -557,16 +604,16 @@ function Detail({ product, waiting }: DetailProps) {
   return (
     // A column, not a block: the scroller takes what is left and the footer
     // below it stays put.
-    <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <div style={SCROLLER}>
+    <div class="sje-sheet__detail" style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div class="sje-sheet__detail-scroll" style={SCROLLER}>
         {/* Edge to edge — which is why the padding below is on an inner box
             and not on this one. A gallery inset from the sheet's sides reads
             as a picture OF a product; one that runs to the edges reads as the
             product itself, which is the whole job of the top of a sheet. */}
         <Gallery images={gallery} waiting={waiting} activeUrl={variant?.imageUrl} />
 
-        <div style={{ padding: sp(1.5) }}>
-        <div style={{ fontSize: fs(1), lineHeight: 1.3, fontWeight: 700 }}>
+        <div class="sje-sheet__summary" style={{ padding: sp(1.5) }}>
+        <div class="sje-sheet__product-title" style={{ fontSize: fs(1), lineHeight: 1.3, fontWeight: 700 }}>
           {product.title}
         </div>
 
@@ -580,6 +627,7 @@ function Detail({ product, waiting }: DetailProps) {
 
       {product.handle && (
         <a
+          class="sje-sheet__product-link"
           href={productUrl(product.handle)}
           // A real link, so it is middle-clickable and openable in a new tab.
           // Following it leaves the video, which is the shopper's choice to
@@ -601,10 +649,11 @@ function Detail({ product, waiting }: DetailProps) {
       {/* Nothing to choose between on a product with a single variant, and a
           picker with one chip in it is a control that does nothing. */}
       {variants.length > 1 && (
-        <div style={{ marginBlockStart: sp(2) }}>
-          <div style={{ fontSize: fs(0.8), fontWeight: 600, color: MUTED }}>Options</div>
+        <div class="sje-sheet__options" style={{ marginBlockStart: sp(2) }}>
+          <div class="sje-sheet__options-label" style={{ fontSize: fs(0.8), fontWeight: 600, color: MUTED }}>Options</div>
 
           <div
+            class="sje-sheet__variants"
             style={{
               display: "flex",
               flexWrap: "wrap",
@@ -642,6 +691,7 @@ function Detail({ product, waiting }: DetailProps) {
           The error and the cart link come with it: a message about the button
           belongs beside the button, not wherever the scroll happens to be. */}
       <div
+        class="sje-sheet__bar"
         style={{
           // The toast hangs off the top of this, so it has to be the
           // positioned ancestor.
@@ -654,6 +704,7 @@ function Detail({ product, waiting }: DetailProps) {
       >
         {added && <Toast key={confirmed} />}
       <button
+        class="sje-sheet__add"
         type="button"
         onClick={add}
         disabled={!inStock || adding}
@@ -722,10 +773,11 @@ function Description({ text }: { text: string }) {
   const clampable = text.length > DESCRIPTION_CLAMP_OVER;
 
   return (
-    <div style={{ marginBlockStart: sp(2) }}>
-      <div style={{ fontSize: fs(0.8), fontWeight: 600, color: MUTED }}>Description</div>
+    <div class="sje-sheet__description" style={{ marginBlockStart: sp(2) }}>
+      <div class="sje-sheet__description-label" style={{ fontSize: fs(0.8), fontWeight: 600, color: MUTED }}>Description</div>
 
       <div
+        class="sje-sheet__description-body"
         style={{
           marginBlockStart: sp(0.5),
           fontSize: fs(0.85),
@@ -749,6 +801,7 @@ function Description({ text }: { text: string }) {
 
       {clampable && (
         <button
+          class="sje-sheet__description-toggle"
           type="button"
           onClick={() => setOpen((was) => !was)}
           aria-expanded={open}
@@ -806,7 +859,7 @@ function Toast() {
       aria-live="polite"
       // The class carries the animation. A `style` attribute cannot hold a
       // keyframe, which is the only reason any of this widget uses a class.
-      class="sje-toast"
+      class="sje-sheet__toast sje-toast"
       style={{
         position: "absolute",
         // Directly above the footer, overlaying the foot of the scroll.
@@ -819,6 +872,7 @@ function Toast() {
       }}
     >
       <div
+        class="sje-sheet__toast-text"
         style={{
           ...TYPE,
           display: "flex",
@@ -872,6 +926,7 @@ interface VariantChipProps {
 function VariantChip({ variant, selected, onPick }: VariantChipProps) {
   return (
     <button
+      class="sje-sheet__variant"
       type="button"
       onClick={onPick}
       disabled={!variant.available}
@@ -995,12 +1050,12 @@ function Gallery({ images, waiting, activeUrl }: GalleryProps) {
     {/* The arrows are positioned against this, and it is exactly the height of
         the track — the dots below are OUTSIDE it, so an arrow centred here is
         centred on the photos rather than on the photos plus the dots. */}
-    <div style={{ position: "relative", height: sp(GALLERY_STEPS) }}>
+    <div class="sje-sheet__gallery" style={{ position: "relative", height: sp(GALLERY_STEPS) }}>
       <div
         ref={track}
         // The class carries the WebKit scrollbar rule, which is a
         // pseudo-element and so cannot be written inline.
-        class="sje-scroller"
+        class="sje-sheet__gallery-track sje-scroller"
         onScroll={(event) => {
           const element = event.currentTarget;
           const base = element.getBoundingClientRect().left;
@@ -1056,7 +1111,7 @@ function Gallery({ images, waiting, activeUrl }: GalleryProps) {
       >
         {waiting && images.length === 0 ? (
           <div
-            class="sje-skeleton"
+            class="sje-sheet__slide-skeleton sje-skeleton"
             style={{
               flex: "0 0 auto",
               width: slideWidth,
@@ -1070,6 +1125,7 @@ function Gallery({ images, waiting, activeUrl }: GalleryProps) {
         ) : (
           images.map((url, position) => (
             <div
+              class="sje-sheet__slide"
               key={url}
               style={{
                 flex: "0 0 auto",
@@ -1086,6 +1142,7 @@ function Gallery({ images, waiting, activeUrl }: GalleryProps) {
               }}
             >
               <img
+                class="sje-sheet__slide-image"
                 src={url}
                 alt=""
                 // The first is what the shopper is looking at the moment the
@@ -1162,6 +1219,7 @@ interface GalleryArrowProps {
 function GalleryArrow({ side, disabled, onClick }: GalleryArrowProps) {
   return (
     <button
+      class="sje-sheet__gallery-arrow"
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -1199,6 +1257,7 @@ function GalleryDots({
 
   return (
     <div
+      class="sje-sheet__thumbs"
       style={{
         display: "flex",
         alignItems: "center",
@@ -1210,6 +1269,7 @@ function GalleryDots({
       {images.length <= MAX_DOTS ? (
         images.map((url, position) => (
           <button
+            class="sje-sheet__thumb"
             key={url}
             type="button"
             onClick={() => onPick(position)}
@@ -1232,7 +1292,7 @@ function GalleryDots({
       ) : (
         // Past a handful, dots stop being countable and start being a grey
         // smear. A number says the same thing and keeps saying it.
-        <div style={{ fontSize: fs(0.75), color: MUTED }}>
+        <div class="sje-sheet__counter" style={{ fontSize: fs(0.75), color: MUTED }}>
           {index + 1} / {images.length}
         </div>
       )}
@@ -1250,7 +1310,7 @@ function GalleryDots({
 function Thumb({ url, waiting, steps }: { url?: string; waiting: boolean; steps: number }) {
   return (
     <div
-      class={waiting ? "sje-skeleton" : undefined}
+      class={waiting ? "sje-sheet__thumb-frame sje-skeleton" : "sje-sheet__thumb-frame"}
       style={{
         flex: "0 0 auto",
         width: sp(steps),
@@ -1267,6 +1327,7 @@ function Thumb({ url, waiting, steps }: { url?: string; waiting: boolean; steps:
       {NBSP}
       {url && (
         <img
+          class="sje-sheet__thumb-image"
           src={url}
           alt=""
           loading="lazy"
@@ -1288,7 +1349,7 @@ function Thumb({ url, waiting, steps }: { url?: string; waiting: boolean; steps:
 function Bar({ steps, width }: { steps: number; width: string }) {
   return (
     <div
-      class="sje-skeleton"
+      class="sje-sheet__price-skeleton sje-skeleton"
       style={{
         marginBlockStart: sp(0.5),
         width,
@@ -1321,6 +1382,7 @@ function PriceRow({
 
   return (
     <div
+      class="sje-sheet__prices"
       style={{
         marginBlockStart: sp(0.5),
         display: "flex",
@@ -1330,6 +1392,7 @@ function PriceRow({
       }}
     >
       <span
+        class="sje-sheet__price"
         style={{
           fontSize: fs(steps),
           lineHeight: 1.2,
@@ -1342,6 +1405,7 @@ function PriceRow({
 
       {priced.compareAtPrice && (
         <span
+          class="sje-sheet__compare"
           style={{
             fontSize: fs(steps * 0.8),
             lineHeight: 1.2,
@@ -1356,6 +1420,7 @@ function PriceRow({
 
       {off !== null && (
         <span
+          class="sje-sheet__discount"
           style={{
             fontSize: fs(steps * 0.72),
             lineHeight: 1.2,

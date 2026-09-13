@@ -87,6 +87,7 @@ export function RailArrows({
 
   return (
     <div
+      class="sje-arrows"
       style={{
         flex: "0 0 auto",
         display: "flex",
@@ -122,6 +123,7 @@ export function Arrow({ direction, tone = "plain", size, spent, onClick }: Arrow
       // Left in the tree rather than removed, so the row does not reflow every
       // time the shopper reaches an end. `disabled` is what takes it out of
       // the tab order and stops it being announced as available.
+      class={`sje-arrow sje-arrow--${direction}`}
       disabled={spent}
       aria-label={isPrev ? "Previous videos" : "Next videos"}
       style={{

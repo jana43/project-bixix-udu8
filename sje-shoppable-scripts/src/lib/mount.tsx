@@ -16,6 +16,7 @@
 // and renders anything new. Already-rendered nodes are marked so a re-scan
 // never mounts twice over the top of itself.
 import { render, type ComponentType } from "preact";
+import { trackWidgetImpression } from "./analytics";
 import { widget, type SJEWidget } from "./sje";
 import { readSettings, type SJESettings } from "./settings";
 
@@ -45,6 +46,13 @@ function mountInto(node: HTMLElement, Component: ComponentType<WidgetProps>): vo
   }
 
   node.dataset[MOUNTED] = "1";
+
+  // One impression per mount point, which is one per PLACEMENT — a merchant
+  // showing the same widget in two sections gets two, because a shopper on that
+  // page saw it twice. The `MOUNTED` guard above is what keeps the re-scan from
+  // counting the same placement again on every mutation.
+  trackWidgetImpression(found.id);
+
   // Read per mount point, not once per script: two blocks can show the same
   // widget with different settings, and each owns its own.
   render(<Component widget={found} settings={readSettings(node)} />, node);

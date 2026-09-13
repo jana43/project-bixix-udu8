@@ -1,12 +1,59 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "e0485a8d213a0d79dd2037f626fd2f08"
-application_url = "https://localhost:3000/shoppable_videos"
+application_url = "https://toolkit-innovations-selling-sees.trycloudflare.com/shoppable_videos"
 embedded = true
 name = "shoppable_videos"
 
 [webhooks]
 api_version = "2026-07"
+
+# Both `uri` values below must point at this app's current host, at the path
+# the shared router dispatches to `handleWebhook`:
+#
+#     https://<app host>/shoppable_videos/api/webhooks
+#
+# They take the same host as `application_url` and `redirect_urls` above/below,
+# so change all of them together whenever the tunnel or deployed host changes —
+# and remember the `-dev` app has its own TOML and its own host.
+
+# Order attribution. The storefront stamps the cart with the video and widget a
+# shopper added from (`_sje_source` and `_sje_p<productId>` in `lib/cart.ts`),
+# Shopify carries cart attributes onto the order as `note_attributes`, and this
+# is where they are read back — see `lib/shoppable_videos/parseOrderAttribution.ts`
+# in the admin panel.
+#
+# ⚠️ This is the ONLY way orders and revenue are ever recorded. Without it the
+# attributed-revenue figures are structurally present and permanently zero.
+#
+# ⚠️ It needs `read_orders`, which Shopify classifies as PROTECTED CUSTOMER DATA.
+# That means requesting approval in the Partner Dashboard, declaring a data
+# protection level, and — because it is a scope change — every existing install
+# going through the grant screen again. Budget for the review, not just the code.
+#
+# The handler takes four things off an order: its id, its note attributes, its
+# shop-currency line amounts, and a country code. No name, no address, no email,
+# no customer id. That is what keeps the compliance topics below honest; see the
+# note in `lib/shared/handleWebhook.ts`.
+[[webhooks.subscriptions]]
+topics = [ "orders/create" ]
+uri = "https://toolkit-innovations-selling-sees.trycloudflare.com/api/webhooks"
+
+# Plan entitlements. Shopify delivers this whenever a shop subscribes, changes
+# plan, or cancels; `handleWebhook.ts` hands it to the cell's
+# `onSubscriptionUpdate`, which resolves the plan against the super-admin
+# catalog, publishes it to the `shoppable_videos_plan` metafield, and
+# deactivates whatever the new plan no longer covers.
+#
+# Without this topic a downgrade only takes effect the next time the merchant
+# opens the app (`SubscriptionSync` posts to `/api/subscription-sync` on every
+# load) — which for a merchant who cancels and walks away is never.
+#
+# The handler returns 503 on a retryable failure, so a delivery that arrives
+# before the shop has an offline token is redelivered rather than lost.
+[[webhooks.subscriptions]]
+topics = [ "app_subscriptions/update" ]
+uri = "https://toolkit-innovations-selling-sees.trycloudflare.com/api/webhooks"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -22,10 +69,17 @@ api_version = "2026-07"
 #               which lists the merchant's themes so the theme-editor deep link
 #               can point at the one they chose. Read only: the app never
 #               writes to a theme, it hands the merchant a link into the editor.
+# read_orders — the `orders/create` webhook above, which is what turns the cart
+#               attribution the player writes into attributed orders and
+#               revenue. ⚠️ PROTECTED CUSTOMER DATA: it needs Partner Dashboard
+#               approval and a data protection level, and adding it re-prompts
+#               every existing install for consent. Only the note attributes,
+#               the line amounts in shop currency and a country code are read
+#               from an order; nothing identifying a person is read or stored.
 # App-installation ("app data") metafields need no scope of their own: the
 # AppInstallation owner is the isolation boundary, so the media library's
 # storage is not represented here.
-scopes = "read_files,write_files,read_products,read_themes"
+scopes = "read_files,write_files,read_products,read_themes,read_orders"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
@@ -42,4 +96,4 @@ direct_api_mode = "offline"
 embedded_app_direct_api_access = true
 
 [auth]
-redirect_urls = [ "https://localhost:3000/shoppable_videos/api/auth/callback" ]
+redirect_urls = [ "https://toolkit-innovations-selling-sees.trycloudflare.com/api/auth/callback" ]

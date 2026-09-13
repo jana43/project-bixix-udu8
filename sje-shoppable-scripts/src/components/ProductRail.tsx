@@ -91,7 +91,7 @@ export function ProductRail({ media, onOpen }: ProductRailProps) {
       onClick={(event) => event.stopPropagation()}
       // The class carries one thing: the WebKit scrollbar rule, which is a
       // pseudo-element and so cannot be written inline.
-      class="sje-scroller"
+      class="sje-product-rail sje-scroller"
       style={{
         position: "absolute",
         insetInline: 0,
@@ -140,6 +140,7 @@ function Card({ product, waiting, onOpen }: CardProps) {
     // `handle` is always present on a tagged product; the `#` is only for the
     // impossible case, and is inert rather than wrong.
     <a
+      class="sje-product-rail__card"
       href={product.handle ? productUrl(product.handle) : "#"}
       onClick={(event) => {
         // Scrolling the rail must not also pause the video behind it.
@@ -183,11 +184,12 @@ function Card({ product, waiting, onOpen }: CardProps) {
           background: waiting ? SKELETON_FILL : "#fff",
           ...NOT_EMPTY,
         }}
-        class={waiting ? "sje-skeleton" : undefined}
+        class={waiting ? "sje-product-rail__frame sje-skeleton" : "sje-product-rail__frame"}
       >
         {NBSP}
         {product.imageUrl && (
           <img
+            class="sje-product-rail__image"
             src={product.imageUrl}
             alt=""
             loading="lazy"
@@ -199,8 +201,9 @@ function Card({ product, waiting, onOpen }: CardProps) {
       {/* `min-width: 0` is what lets the clamp and the ellipsis engage: without
           it a flex item refuses to shrink below its text's natural width, and
           a long product name pushes the card wider instead of wrapping. */}
-      <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+      <div class="sje-product-rail__text" style={{ flex: "1 1 auto", minWidth: 0 }}>
         <div
+          class="sje-product-rail__title"
           style={{
             fontSize: fs(0.7),
             lineHeight: 1.3,
@@ -220,7 +223,7 @@ function Card({ product, waiting, onOpen }: CardProps) {
           // A grey bar the height of the price line, so the card does not
           // resize when the numbers land.
           <div
-            class="sje-skeleton"
+            class="sje-product-rail__title-skeleton sje-skeleton"
             style={{
               marginBlockStart: sp(0.25),
               // An explicit height, not a font size: `NOT_EMPTY` zeroes the
@@ -240,6 +243,7 @@ function Card({ product, waiting, onOpen }: CardProps) {
           // and a saving pushed onto its own line still reads correctly, while
           // one clipped mid-number does not.
           <div
+            class="sje-product-rail__prices"
             style={{
               marginBlockStart: sp(0.25),
               display: "flex",
@@ -249,6 +253,7 @@ function Card({ product, waiting, onOpen }: CardProps) {
             }}
           >
             <span
+              class="sje-product-rail__price"
               style={{
                 fontSize: fs(0.85),
                 lineHeight: 1.2,
@@ -262,6 +267,7 @@ function Card({ product, waiting, onOpen }: CardProps) {
 
             {product.compareAtPrice && (
               <span
+                class="sje-product-rail__compare"
                 style={{
                   fontSize: fs(0.65),
                   lineHeight: 1.2,
@@ -276,6 +282,7 @@ function Card({ product, waiting, onOpen }: CardProps) {
 
             {percentOff(product) !== null && (
               <span
+                class="sje-product-rail__discount"
                 style={{
                   fontSize: fs(0.6),
                   lineHeight: 1.2,

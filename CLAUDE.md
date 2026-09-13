@@ -101,6 +101,20 @@ are no Liquid-only layouts left, which is why `snippets/sje-widget.liquid` is go
   - **asset filenames:** `sje-widget.css`, `sje-carousel.js`, `sje-stories.js`,
     `sje-stacked.js`, `sje-grid.js`, `sje-bubble.js`, `sje-banner.js`,
     `sje-product-videos.js`
+- ⚠️ **Every element carries an `sje-` class, and most of them carry NO STYLE.** They are
+  hooks: named anchors a merchant or a future stylesheet can target, and a stable contract
+  with whatever custom CSS gets written later. `.sje-player__close`, `.sje-sheet__add`,
+  `.sje-story__ring`, `.sje-banner__cta` and the rest have no rule anywhere in
+  `sje-widget.css`.
+  - **Adding an element means adding a class.** A silent one is a hole in the contract.
+  - **A hook must not collide with a styled name.** These carry real rules and are the ones
+    to keep clear of: `.sje-widget`, `.sje-widget--*`, `.sje-widget__items`,
+    `.sje-widget__item`, `.sje-widget__heading`, `.sje-widget__notice`, `.sje-scroller`,
+    `.sje-sheet*`, `.sje-hint*`, `.sje-spinner`, `.sje-skeleton`, `.sje-toast`,
+    `.sje-bubble--desktop-only`. Where an element needs both, the hook goes FIRST and the
+    styled class stays: `class="sje-carousel__row sje-scroller"`.
+  - Styling still lives inline (§4). These classes change nothing about that — they are for
+    the CSS that has not been written yet.
 - ⚠️ The layout is **`story-bar`, not `stories`**. That string is the contract between the
   block's class, the mount point's id and `mountAll()`. The script FILE is `sje-stories.js`.
   **`floating-bubble` / `sje-bubble.js`** is the same deliberate mismatch. Those are the only
@@ -216,6 +230,16 @@ responsive or is simply not a length:
   rather than inline: the question it asks *is* the breakpoint. There is exactly **one**
   `@media (max-width: 749px)` block in `sje-widget.css` and new rules go inside it — a
   second one is a second place to change the breakpoint.
+- **The banner's text** — `--sje-banner-unit`, and the only thing here that answers a
+  CONTAINER rather than the viewport. A banner's height comes from its width and a shape the
+  merchant picked, so the box scales with the section — about 1260×709 on a desktop and
+  371×209 on a phone, 70% smaller — while the font token steps down only 14%. Text sized
+  from the token therefore GROWS relative to its banner as the screen shrinks, and a heading
+  that fits a desktop hero overflows the same banner on a phone. `1.15cqi` inside a
+  `clamp()` tracks the banner exactly, with a floor so a narrow banner stays readable and a
+  ceiling so a wide one does not print a heading four inches tall. Declared twice in
+  `sje-widget.css` — the plain token first, the container version only inside
+  `@supports (width: 1cqi)` — and the reason that order is not optional is written there.
 - **How many cards go across** — `--sje-across-count`, and the only KIND of merchant setting
   here that is not a multiple of a token. A count is not a length: it cannot step down by
   25% with everything else, and no arithmetic turns "four across a desktop" into "two across
@@ -233,6 +257,15 @@ Two more, for reasons of their own:
   the storefront as it does in the app's position editor. Only its legibility floors
   (`MIN_PRICE_SIZE`, `MIN_PRICE_PADDING` in
   [Sticker.tsx](sje-shoppable-scripts/src/components/Sticker.tsx)) come off the scale.
+- ⚠️ **"Is this a phone" is two questions, not one.** The full-screen player swipes between
+  videos on a phone and draws arrows everywhere else, and that needs BOTH `(pointer: coarse)`
+  and the width — `phone = coarse && spacing < BASE_SPACING` in
+  [Lightbox.tsx](sje-shoppable-scripts/src/components/Lightbox.tsx). Coarse alone sweeps
+  tablets in with phones (an iPad has room for arrows and a reach that makes a full-height
+  swipe worse than a button); the width alone takes the arrows off a desktop window dragged
+  narrow, which has a mouse and cannot swipe at all. A phone in LANDSCAPE is above the
+  breakpoint and gets arrows, deliberately — the rest of the extension already treats that
+  viewport as a desktop one.
 - ⚠️ **Tap targets are the tightest thing on the scale.** The Lightbox's controls are
   `* 5` — 40px on desktop, **30px on a phone**. That still clears the 24px minimum a pointer
   target has to meet, but there is no room left. If the mobile spacing token is ever taken
@@ -329,6 +362,7 @@ that is a change of MEANING and needs new setting ids — see the warning below.
 | `arrow_scale` (carousel, stacked) | 200–1000, step 50 | 500 | ×5 the standard spacing = 40px |
 | `card_radius` (all but the story bar) | 0–400, step 25 | 100 | ×1 the standard spacing = 8px |
 | `banner_height` (banner) | 25–100, step 5 | 60 | **`vh`, not a token** — already relative, and only read when `banner_ratio` is `fixed` |
+| `heading_scale` (banner) | 100–600, step 25 | 300 | ×3 the **banner unit**, not the standard font size — see `--sje-banner-unit` |
 | `bubble_scale` (bubble) | 600–2400, step 100 | 1200 | ×12 the standard spacing = 96px wide |
 | `bubble_offset` (bubble) | 0–800, step 50 | 200 | ×2 the standard spacing = 16px from each edge |
 

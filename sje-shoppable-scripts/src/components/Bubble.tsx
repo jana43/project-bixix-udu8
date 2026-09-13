@@ -311,7 +311,7 @@ function Floater({
     <div
       // ⚠️ The one class, and it carries one rule: hide on a phone. See
       // `MOBILE_CLASS` for why this cannot be inline like everything else.
-      class={onMobile ? undefined : MOBILE_CLASS}
+      class={onMobile ? "sje-bubble" : `sje-bubble ${MOBILE_CLASS}`}
       style={{
         position: "fixed",
         [corner.block]: inset(offset, corner.block),
@@ -329,6 +329,7 @@ function Floater({
       }}
     >
       <div
+        class="sje-bubble__frame"
         // A real button, not a div with a click handler: this is the one thing
         // a shopper can do here, and it should be reachable by keyboard and
         // announced as an action.
@@ -357,10 +358,11 @@ function Floater({
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        {poster && <img src={poster} alt="" style={FILL} />}
+        {poster && <img class="sje-bubble__poster" src={poster} alt="" style={FILL} />}
 
         {preview && (
           <video
+            class="sje-bubble__video"
             ref={videoRef}
             src={preview}
             poster={poster}
@@ -384,6 +386,7 @@ function Floater({
             by itself; a still needs telling. */}
         {!preview && (
           <div
+            class="sje-bubble__play"
             aria-hidden="true"
             style={{
               position: "absolute",
@@ -404,6 +407,7 @@ function Floater({
 
       {onDismiss && (
         <button
+          class="sje-bubble__close"
           type="button"
           onClick={(event) => {
             // The bubble underneath is a click target too, and closing must
@@ -576,6 +580,7 @@ export function Bubble({ widget, settings }: WidgetProps) {
           index={open}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           onIndex={setOpenAt}
           onClose={() => setOpenAt(null)}
         />
@@ -586,7 +591,7 @@ export function Bubble({ widget, settings }: WidgetProps) {
           dismissed and no player open the portal's host div holds nothing at
           all. See `lib/notEmpty.ts` — this is the third time that rule has
           cost this extension a bug. */}
-      <span style={NOT_EMPTY} aria-hidden="true">
+      <span class="sje-bubble__spacer" style={NOT_EMPTY} aria-hidden="true">
         {NBSP}
       </span>
     </Portal>

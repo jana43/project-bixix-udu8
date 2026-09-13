@@ -15,6 +15,7 @@
 // stranger inside a merchant's theme, and a class name of ours may collide
 // with theirs.
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { trackProductTap, WatchSession } from "../lib/analytics";
 import { posterOf, type SJEMedia } from "../lib/sje";
 import { Portal } from "../lib/portal";
 import { useElementWidth } from "../lib/useElementWidth";
@@ -225,6 +226,7 @@ function Neighbour({ media, slot, frameWidth, live, products }: NeighbourProps) 
 
   return (
     <div
+      class="sje-player__neighbour"
       // Stacked exactly one stage away, so the track's own offset is the only
       // thing that decides what is on screen.
       style={{
@@ -240,6 +242,7 @@ function Neighbour({ media, slot, frameWidth, live, products }: NeighbourProps) 
     >
       {poster && (
         <img
+          class="sje-player__neighbour-poster"
           src={poster}
           alt=""
           draggable={false}
@@ -253,6 +256,7 @@ function Neighbour({ media, slot, frameWidth, live, products }: NeighbourProps) 
 
       {media.title && products !== "free-scroll" && (
         <div
+          class="sje-player__neighbour-veil"
           style={{
             position: "absolute",
             insetInline: 0,
@@ -278,6 +282,9 @@ function Neighbour({ media, slot, frameWidth, live, products }: NeighbourProps) 
  * this asks what the shopper is pointing WITH. A desktop browser dragged
  * narrow is below the breakpoint and still has a mouse, and taking its only
  * on-screen way between videos away would leave nothing but the arrow keys.
+ *
+ * ⚠️ Half an answer on its own. Swipe-versus-arrows needs BOTH this and the
+ * width — see `phone`, which is what the gesture and the arrows actually read.
  */
 const COARSE = "(pointer: coarse)";
 
@@ -328,11 +335,32 @@ interface LightboxProps {
   live: LiveProducts;
   /** How this placement shows the video's products. See `PlayerProducts`. */
   products: PlayerProducts;
+  /**
+   * The widget this player was opened from.
+   *
+   * Analytics only — nothing here renders it. Every view, watch-second and
+   * product tap counted below is counted twice: once against the video, and
+   * once against the video WITHIN this widget, which is what lets the dashboard
+   * answer "which placement is earning". It also travels on to the cart
+   * attribution through `ProductSheet`.
+   *
+   * Optional so a player opened from somewhere with no widget in scope still
+   * records the video rather than recording nothing.
+   */
+  widgetId?: string;
   onIndex: (next: number) => void;
   onClose: () => void;
 }
 
-export function Lightbox({ items, index, live, products, onIndex, onClose }: LightboxProps) {
+export function Lightbox({
+  items,
+  index,
+  live,
+  products,
+  widgetId,
+  onIndex,
+  onClose,
+}: LightboxProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   /**
@@ -420,11 +448,38 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
    * load leaves the fallback at 8 and the desktop layout, which is the right
    * way to be wrong.
    *
-   * NOT `(pointer: coarse)`, which the swipe and the arrows use. That asks
-   * what the shopper is pointing WITH; this asks how much room there is, and
-   * a desktop window dragged narrow wants the full-bleed treatment too.
+   * NOT `(pointer: coarse)`, which is half of what the swipe and the arrows
+   * read. That asks what the shopper is pointing WITH; this asks how much room
+   * there is, and a desktop window dragged narrow wants the full-bleed
+   * treatment too. See `phone` just below for the pair.
    */
   const fullBleed = spacing < BASE_SPACING;
+
+  /**
+   * Whether this is a PHONE: swipe between videos, no arrows.
+   *
+   * ⚠️ Both halves, and neither alone is enough:
+   *
+   *   • `coarse` alone is what this used to be, and it swept tablets in with
+   *     phones. An iPad has a coarse pointer and a 768px-wide screen — room
+   *     for arrows, and a reach across it that makes a full-height swipe a
+   *     worse way to move than a button. Tablets keep the arrows.
+   *   • The token alone would take the arrows off a DESKTOP window dragged
+   *     narrow, which has a mouse and cannot swipe at all — leaving the arrow
+   *     keys as the only way between videos. That is the case `COARSE`'s note
+   *     warns about, and it still applies.
+   *
+   * The width half is read off the SPACING TOKEN rather than a media query,
+   * for the reason `fullBleed` gives directly above: the breakpoint lives in
+   * `sje-widget.css` and nowhere else (CLAUDE.md §3).
+   *
+   * ⚠️ A phone in LANDSCAPE is wider than the breakpoint, so it gets the
+   * arrows. That is deliberate rather than overlooked — the whole extension
+   * treats that viewport as a desktop one, and a player that swipes in
+   * portrait and not in landscape would be stranger than one that follows the
+   * same line everything else does.
+   */
+  const phone = coarse && spacing < BASE_SPACING;
 
   const [hint, setHint] = useState(false);
 
@@ -485,7 +540,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
   // Mount only. `items.length` rather than `hasNext`, so moving to the last
   // video does not re-run this and put the hint back up mid-session.
   useEffect(() => {
-    if (!coarse || items.length < 2 || swipedBefore) return;
+    if (!phone || items.length < 2 || swipedBefore) return;
 
     setHint(true);
     const timer = setTimeout(() => setHint(false), HINT_MS);
@@ -586,6 +641,17 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
   const stageHeight = () => stageRef.current?.clientHeight ?? 0;
 
   const onTouchStart = (event: TouchEvent) => {
+    // ⚠️ Not on a tablet, which fires touch events like a phone but keeps the
+    // arrows. Refused HERE rather than by not binding the handler, so that
+    // `from.current` is cleared either way and a rotation mid-gesture cannot
+    // leave a half-finished drag behind.
+    //
+    // Tap-to-pause is unaffected: that is the stage's `onClick`, not this.
+    if (!phone) {
+      from.current = null;
+      return;
+    }
+
     // Two fingers is a pinch, and none of this applies to it. Neither does a
     // touch that arrives mid-settle — the frame is already going somewhere.
     if (event.touches.length !== 1 || glide) {
@@ -715,18 +781,56 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
     return () => clearTimeout(timer);
   }, [glide, glideMs, index, onIndex, onClose]);
 
+  /**
+   * Watchtime and the view threshold, for the video currently on screen.
+   *
+   * A ref rather than state: it is written four times a second by `timeupdate`
+   * and nothing renders from it, so putting it in state would be a re-render
+   * per tick for no visible change.
+   *
+   * Re-made whenever the media changes, which is what makes a shopper swiping
+   * back to a video they already watched count as a SECOND view. A `null` guard
+   * rather than creating it eagerly, because the session must not start until
+   * there is genuinely a video to attribute it to.
+   */
+  const watch = useRef<WatchSession | null>(null);
+
+  useEffect(() => {
+    watch.current = new WatchSession(media.id, widgetId);
+    return () => {
+      watch.current = null;
+    };
+  }, [media.id, widgetId]);
+
   const onTimeUpdate = () => {
     const video = videoRef.current;
     if (!video) return;
     const { currentTime, duration } = video;
+
+    watch.current?.tick(currentTime);
+
     // A stream still working out how long it is reports `NaN` or `Infinity`.
     if (!duration || !isFinite(duration)) return;
     setProgress(Math.min(1, Math.max(0, currentTime / duration)));
   };
 
+  /**
+   * A seek is not watching.
+   *
+   * Without this the jump lands in `timeupdate` as one enormous forward step.
+   * `WatchSession` already refuses a step that large, so this is belt and braces
+   * — but it also means a seek BACKWARDS does not leave the tracker measuring
+   * the same seconds twice.
+   */
+  const onSeeked = () => {
+    const video = videoRef.current;
+    if (video) watch.current?.seeked(video.currentTime);
+  };
+
   return (
     <Portal>
       <dialog
+        class="sje-player"
         ref={attachDialog}
         aria-label={media.title || "Video"}
         // Escape, raised by the dialog itself. Prevented so the browser does
@@ -806,6 +910,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
             portrait on a phone, letterboxed on a desktop, with no reliance on
             how a browser clamps `aspect-ratio` against `max-width`. */}
         <div
+          class="sje-player__stage"
           ref={stageRef}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
@@ -865,6 +970,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               frames rendered permanently would mean two more `video` elements
               on every open, for a swipe that may never come. */}
           <div
+            class="sje-player__track"
             style={{
               position: "absolute",
               inset: 0,
@@ -892,9 +998,10 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               />
             )}
 
-            <div style={{ position: "absolute", inset: 0 }}>
+            <div class="sje-player__frame" style={{ position: "absolute", inset: 0 }}>
           {source ? (
             <video
+              class="sje-player__video"
               // Keyed by media: moving to the next item must build a new
               // element rather than re-point this one, which would otherwise
               // carry the outgoing video's buffered time and readyState in.
@@ -908,6 +1015,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               preload="auto"
               onLoadedMetadata={applyPlayback}
               onTimeUpdate={onTimeUpdate}
+              onSeeked={onSeeked}
               // `waiting` is the exact event for this and the only one worth
               // trusting: "playback has stopped because of a temporary lack of
               // data". `stalled` is the tempting alternative and it is wrong —
@@ -950,6 +1058,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           ) : (
             poster && (
               <img
+                class="sje-player__poster"
                 src={poster}
                 alt={media.title || ""}
                 style={{
@@ -978,6 +1087,14 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
                 // product then, with no Back arrow, because there is nothing
                 // behind it.
                 const tagged = media.products ?? [];
+
+                // The sticker names ONE product, so that is what the tap is
+                // about even when it opens the list of all of them. Counting
+                // the whole list here would inflate every tagged product's taps
+                // on every badge tap.
+                const named = media.stickyProductId ?? tagged[0]?.id;
+                if (named) trackProductTap(media.id, named, widgetId);
+
                 setSheet(
                   tagged.length === 1
                     ? { productId: tagged[0].id, stacked: false }
@@ -994,7 +1111,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               hint is gone in two seconds either way. */}
           {hint && (
             <div
-              class="sje-hint"
+              class="sje-player__hint sje-hint"
               aria-hidden="true"
               style={{
                 position: "absolute",
@@ -1006,6 +1123,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               }}
             >
               <div
+                class="sje-player__hint-body"
                 style={{
                   display: "flex",
                   flexDirection: "column",
@@ -1020,7 +1138,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               >
                 {/* The arrow is the message; the words are the caption. The
                     loop is on the arrow alone so the text does not judder. */}
-                <div class="sje-hint__arrow">
+                <div class="sje-player__hint-arrow sje-hint__arrow">
                   <ChevronUp size={sp(3)} />
                 </div>
                 Swipe up for next
@@ -1035,6 +1153,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               it is an answer, and the spinner is only ever a question. */}
           {source && spinner && !paused && (
             <div
+              class="sje-player__status"
               // Announced, because a shopper who cannot see the screen has no
               // other way to tell a slow video from a broken one.
               role="status"
@@ -1053,7 +1172,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
                 // The class carries the rotation. A `style` attribute cannot
                 // hold a keyframe, which is the only reason this widget ever
                 // uses one.
-                class="sje-spinner"
+                class="sje-player__spinner sje-spinner"
                 style={{
                   width: sp(4),
                   height: sp(4),
@@ -1079,6 +1198,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           {/* Paused badge — a hint, not a control. The stage is the control. */}
           {source && paused && (
             <div
+              class="sje-player__paused"
               aria-hidden="true"
               style={{
                 position: "absolute",
@@ -1092,6 +1212,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
                   optical centre sits left of its bounding box, so one centred
                   by geometry looks off-centre to the eye. */}
               <div
+                class="sje-player__paused-glyph"
                 style={{
                   ...BUTTON,
                   width: sp(8),
@@ -1107,6 +1228,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
 
           {media.title && products !== "free-scroll" && (
             <div
+              class="sje-player__title"
               style={{
                 position: "absolute",
                 insetInline: 0,
@@ -1147,6 +1269,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               incoming one's frame. */}
           {products === "free-scroll" && (
             <div
+              class="sje-player__rail"
               style={{
                 opacity: moving ? 0 : 1,
                 transition: `opacity ${glideMs}ms ease`,
@@ -1157,7 +1280,10 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
                   Back. */}
               <ProductRail
                 media={media}
-                onOpen={(productId) => setSheet({ productId, stacked: false })}
+                onOpen={(productId) => {
+                  trackProductTap(media.id, productId, widgetId);
+                  setSheet({ productId, stacked: false });
+                }}
               />
             </div>
           )}
@@ -1165,6 +1291,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           {/* Progress. After the title in the tree, so it is drawn over it. */}
           {source && (
             <div
+              class="sje-player__progress"
               aria-hidden="true"
               style={{
                 position: "absolute",
@@ -1177,6 +1304,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
             >
               {/* Empty but for the space: the same rule as the spinner. */}
               <div
+                class="sje-player__progress-fill"
                 style={{
                   width: `${progress * 100}%`,
                   height: "100%",
@@ -1196,7 +1324,14 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           <ProductSheet
             media={media}
             state={sheet}
-            onSelect={(productId) => setSheet({ productId, stacked: true })}
+            widgetId={widgetId}
+            // Picking a row out of the list is the tap that says which product
+            // the shopper actually wanted — the badge tap that opened the list
+            // only counted the one it named.
+            onSelect={(productId) => {
+              trackProductTap(media.id, productId, widgetId);
+              setSheet({ productId, stacked: true });
+            }}
             onBack={() => setSheet({ productId: null, stacked: true })}
             onClose={() => setSheet(null)}
           />
@@ -1205,6 +1340,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
         {/* The controls sit on the scrim, outside the stage, so a tap on one is
             never also a tap on the video. */}
         <div
+          class="sje-player__controls"
           onClick={(event) => event.stopPropagation()}
           style={{
             position: "absolute",
@@ -1216,6 +1352,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
         >
           {source && (
             <button
+              class="sje-player__mute"
               type="button"
               onClick={() => setMuted((was) => !was)}
               aria-label={muted ? "Unmute" : "Mute"}
@@ -1224,7 +1361,7 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
               {muted ? <VolumeX size={CONTROL_ICON} /> : <Volume2 size={CONTROL_ICON} />}
             </button>
           )}
-          <button type="button" onClick={onClose} aria-label="Close" style={BUTTON}>
+          <button class="sje-player__close" type="button" onClick={onClose} aria-label="Close" style={BUTTON}>
             <X size={CONTROL_ICON} />
           </button>
         </div>
@@ -1233,8 +1370,9 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
             target either side of a portrait frame, sitting on the video —
             and on a phone the swipe replaces them entirely. The keyboard
             arrows are unaffected and still work everywhere. */}
-        {hasPrev && !coarse && (
+        {hasPrev && !phone && (
           <button
+            class="sje-player__prev"
             type="button"
             onClick={(event) => {
               event.stopPropagation();
@@ -1253,8 +1391,9 @@ export function Lightbox({ items, index, live, products, onIndex, onClose }: Lig
           </button>
         )}
 
-        {hasNext && !coarse && (
+        {hasNext && !phone && (
           <button
+            class="sje-player__next"
             type="button"
             onClick={(event) => {
               event.stopPropagation();

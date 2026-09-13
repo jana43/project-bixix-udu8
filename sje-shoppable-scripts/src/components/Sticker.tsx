@@ -120,6 +120,7 @@ export function Sticker({ media, frameWidth, live, onOpen, at }: StickerProps) {
 
   return (
     <div
+      class="sje-sticker"
       // Centred on its point and then rotated, exactly as the admin's editor
       // places it — the order matters, and `translate` before `rotate` is what
       // makes the badge spin about its own middle rather than swing around
@@ -336,6 +337,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
 
   return (
     <div
+      class="sje-sticker__card"
       // Announced as busy rather than as a product while it waits, so a screen
       // reader is not told about a price that is not there yet.
       role={waiting ? "status" : undefined}
@@ -373,7 +375,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
       }}
     >
       <div
-        class={waiting ? "sje-skeleton" : undefined}
+        class={waiting ? "sje-sticker__photo sje-skeleton" : "sje-sticker__photo"}
         style={{
           position: "relative",
           // A real HEIGHT, not `aspect-ratio` alone — the same rule the Liquid
@@ -407,6 +409,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
         {NBSP}
         {!waiting && product.imageUrl && (
           <img
+            class="sje-sticker__image"
             src={product.imageUrl}
             alt=""
             loading="lazy"
@@ -423,6 +426,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
             corner on a right-to-left storefront along with everything else. */}
         {others > 0 && (
           <div
+            class="sje-sticker__chip"
             style={{
               position: "absolute",
               top: pad,
@@ -435,6 +439,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
             }}
           >
             <span
+              class="sje-sticker__chip-label"
               style={{ ...LABEL, fontSize: bfs(labelSteps(CHIP_STEPS, scale)) }}
               // Spelt out for a screen reader, which would otherwise announce
               // "plus three" and leave the shopper to guess at three of what.
@@ -451,10 +456,10 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
           moment the number lands is worse than one that fills a strip it
           already had. */}
       {(waiting || product.price) && (
-        <div style={{ borderBlockStart: HAIRLINE, padding: `${pad}px ${pad * 1.5}px` }}>
+        <div class="sje-sticker__price" style={{ borderBlockStart: HAIRLINE, padding: `${pad}px ${pad * 1.5}px` }}>
           {waiting ? (
             <div
-              class="sje-skeleton"
+              class="sje-sticker__price-skeleton sje-skeleton"
               style={{
                 background: SKELETON_FILL,
                 // Exactly as tall as the line the real price occupies, so the
@@ -470,7 +475,7 @@ function Badge({ product, widthPx, others, scale, waiting }: BadgeProps) {
               {NBSP}
             </div>
           ) : (
-            <span style={{ ...LABEL, fontSize: bfs(labelSteps(PRICE_STEPS, scale)) }}>
+            <span class="sje-sticker__price-text" style={{ ...LABEL, fontSize: bfs(labelSteps(PRICE_STEPS, scale)) }}>
               {formatPrice(product.price!)}
             </span>
           )}

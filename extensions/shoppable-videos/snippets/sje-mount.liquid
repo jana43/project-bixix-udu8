@@ -1,3 +1,5 @@
+{%- assign sje_media = media | default: widget.media -%}
+{%- assign sje_an = app.metafields.shoppable_videos_plan.entitlements.value.analytics -%}
 <div
   id="sje-{{ layout }}-{{ widget_id }}"
   class="sje-mount sje-mount--{{ layout }}"
@@ -56,9 +58,9 @@
   {%- unless layout == 'floating-bubble' or layout == 'banner' -%}
   <div class="sje-widget__items" style="{{ sje_row }}" aria-hidden="true">
     {%- if layout == 'stacked' -%}
-      {%- if widget.media.size >= 5 -%}
+      {%- if sje_media.size >= 5 -%}
         {%- assign sje_bone_limit = 5 -%}
-      {%- elsif widget.media.size >= 3 -%}
+      {%- elsif sje_media.size >= 3 -%}
         {%- assign sje_bone_limit = 3 -%}
       {%- else -%}
         {%- assign sje_bone_limit = 1 -%}
@@ -70,7 +72,7 @@
     {%- else -%}
       {%- assign sje_bone_limit = 8 -%}
     {%- endif -%}
-    {%- for sje_bone_item in widget.media limit: sje_bone_limit -%}
+    {%- for sje_bone_item in sje_media limit: sje_bone_limit -%}
       {%- if layout == 'stacked' -%}
         {%- assign sje_half = sje_bone_limit | minus: 1 | divided_by: 2 -%}
         {%- assign sje_slot = forloop.index0 | minus: sje_half | plus: 2 -%}
@@ -87,18 +89,18 @@
             {%- assign sje_card = 'translate(-50%, -50%) translateX(131.04%) scale(0.6724);z-index:0;filter:brightness(0.62)' -%}
         {%- endcase -%}
         <div
-          class="sje-widget__item"
+          class="sje-widget__item sje-bone sje-bone--stacked"
           style="{{ sje_bone }}position:absolute;inset-inline-start:50%;top:50%;height:100%;max-width:72%;aspect-ratio:9 / 16;transform:{{ sje_card }};"
         >&nbsp;</div>
       {%- elsif layout == 'story-bar' -%}
-        <div style="{{ sje_bone_column }}">
-          <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
+        <div class="sje-bone-column" style="{{ sje_bone_column }}">
+          <div class="sje-widget__item sje-bone" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
           {%- unless settings.show_titles == false -%}
-            <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_caption }}">&nbsp;</div>
+            <div class="sje-widget__item sje-bone sje-bone--caption" style="{{ sje_bone }}{{ sje_bone_caption }}">&nbsp;</div>
           {%- endunless -%}
         </div>
       {%- else -%}
-        <div class="sje-widget__item" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
+        <div class="sje-widget__item sje-bone" style="{{ sje_bone }}{{ sje_bone_shape }}">&nbsp;</div>
       {%- endif -%}
     {%- endfor -%}
   </div>
@@ -109,20 +111,29 @@
     var SJE = (window.SJE = window.SJE || {});
     SJE.widgets = SJE.widgets || {};
     SJE.scripts = SJE.scripts || {};
+    SJE.plan = SJE.plan || { analytics: {{ sje_an | json }} };
+    {%- if sje_an -%}
+    SJE.ingest = SJE.ingest || {
+      host: "http://127.0.0.1:3559",
+      cell: "shoppable_videos",
+      shop: {{ shop.permanent_domain | json }},
+      country: {{ localization.country.iso_code | json }}
+    };
+    {%- endif -%}
     SJE.widgets[{{ widget_id | json }}] = {
       id: {{ widget_id | json }},
       name: {{ widget.name | json }},
       layout: {{ widget.layout | json }},
       enabled: {{ widget.enabled | json }},
       updatedAt: {{ widget.updatedAt | json }},
-      media: {% if widget.media.size > 0 %}{{ widget.media | json }}{% else %}[]{% endif %}
+      media: {% if sje_media.size > 0 %}{{ sje_media | json }}{% else %}[]{% endif %}
     };
-    {%- if widget.media.size == 0 -%}
+    {%- if sje_media.size == 0 -%}
       {%- for sje_media_id in widget.mediaIds -%}
         {%- assign sje_media_key = 'media_' | append: sje_media_id -%}
-        {%- assign sje_media = app.metafields.shoppable_videos[sje_media_key].value -%}
-        {%- if sje_media != blank -%}
-          SJE.widgets[{{ widget_id | json }}].media.push({{ sje_media | json }});
+        {%- assign sje_one = app.metafields.shoppable_videos[sje_media_key].value -%}
+        {%- if sje_one != blank and sje_one.deactivated != true and sje_one.enabled != false -%}
+          SJE.widgets[{{ widget_id | json }}].media.push({{ sje_one | json }});
         {%- endif -%}
       {%- endfor -%}
     {%- endif -%}

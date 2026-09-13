@@ -157,6 +157,49 @@ export interface SJEWidget {
 /** How a given layout's script is doing. Set by the Liquid loader. */
 export type SJEScriptStatus = "idle" | "loading" | "loaded" | "error";
 
+/**
+ * Where analytics beacons go, and who they are for.
+ *
+ * Written by `sje-mount.liquid` before any bundle loads — the same way
+ * `widgets` is — because none of it is knowable from a script. The host is a
+ * deployment constant, and the shop is Liquid's `shop.permanent_domain`.
+ *
+ * ⚠️ There used to be nothing here, because the beacon went to a RELATIVE
+ * `/apps/sv/beacon` and Shopify's App Proxy forwarded it to the analytics
+ * service. That proxy is gone: the service runs on its own domain and the
+ * storefront posts to it directly, so the host has to be carried in the page.
+ */
+export interface SJEIngest {
+  /** Absolute origin of the analytics service. No trailing slash. */
+  host: string;
+  /**
+   * Which app cell the counters belong to — `shoppable_videos`,
+   * `shoppable_videos-dev`.
+   *
+   * The production and development Shopify apps are two different apps writing
+   * two different sets of metafields, and the service keeps them apart by this.
+   * It used to come from the proxy URL in each app's TOML, which is why it now
+   * has to be stated here instead.
+   */
+  cell: string;
+  /** `shop.permanent_domain`. The shop the counters are recorded against. */
+  shop: string;
+  /**
+   * Where the shopper is browsing, as ISO 3166-1 alpha-2.
+   *
+   * From Liquid's `localization.country.iso_code`, which is the country the
+   * storefront is actually being served for — the market Shopify resolved, or
+   * whatever the shopper picked in the country selector. Nothing in a script can
+   * work this out: there is no geolocation on the page, and the timezone is a
+   * guess that is wrong for every traveller and every VPN.
+   *
+   * Optional because a storefront running a theme published before this field
+   * existed sends a mount snippet without it. Those beacons are filed under `ZZ`
+   * rather than dropped.
+   */
+  country?: string;
+}
+
 export interface SJEGlobal {
   /** Every widget on the page, by id. Each carries its own medias. */
   widgets: Record<string, SJEWidget>;
@@ -165,6 +208,19 @@ export interface SJEGlobal {
   scripts: Record<string, SJEScriptStatus>;
   booted?: boolean;
   load?: (layout: string) => void;
+  /**
+   * What the shop's plan permits, written by `sje-mount.liquid` from the
+   * `shoppable_videos_plan` app metafield before any bundle runs.
+   *
+   * Only analytics needs it today — `analytics.ts`'s `enabled()` reads it — but
+   * the rest of the plan gating happens in Liquid, which never renders a block
+   * the plan does not cover.
+   *
+   * ⚠️ ABSENT on a storefront whose theme was published before that snippet
+   * existed. Readers must treat "missing" as the old behaviour, not as "denied"
+   * — see `enabled()`.
+   */
+  plan?: { analytics: boolean };
   /**
    * Whether any block on the page has a full-screen player open.
    *
@@ -176,6 +232,31 @@ export interface SJEGlobal {
    * Absent until the first player opens; `playback.ts` creates it.
    */
   playback?: import("./playback").PlaybackState;
+  /**
+   * What the shopper has done that has not been sent yet, plus the timers and
+   * listeners that send it.
+   *
+   * Here for exactly the reason `playback` is, and the consequence of getting
+   * it wrong is worse: a per-bundle copy would be seven buffers, seven
+   * 20-second timers and seven `visibilitychange` listeners on a page showing
+   * two layouts — each sending a partial session, and each counting the widget
+   * impressions its own bundle happened to see.
+   *
+   * Absent until the first thing worth counting happens; `analytics.ts` creates it.
+   */
+  analytics?: import("./analytics").AnalyticsState;
+  /**
+   * Where those counters are sent, set by `sje-mount.liquid`.
+   *
+   * ⚠️ Not to be confused with `analytics` above. That is the live BUFFER —
+   * what the shopper has done and not yet had sent. This is CONFIGURATION, and
+   * it is written by Liquid before any bundle runs. Assigning one over the
+   * other loses a session's counters.
+   *
+   * Absent when a bundle loaded without the snippet — the Vite dev page does
+   * exactly that — in which case `analytics.ts` buffers and sends nothing.
+   */
+  ingest?: SJEIngest;
   /**
    * Whether a floating bubble has already claimed this page.
    *

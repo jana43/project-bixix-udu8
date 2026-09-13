@@ -39,6 +39,7 @@
 // theirs and their reset may undo ours. Inline wins both.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { widgetMedia, posterOf, videoUrlOf } from "../lib/sje";
+import { useVideoImpression } from "../lib/analytics";
 import { observeInView } from "../lib/inView";
 import { useElementSize } from "../lib/useElementSize";
 import { useHold, usePlaybackFrozen } from "../lib/playback";
@@ -183,6 +184,12 @@ export function Banner({ widget, settings }: WidgetProps) {
     return observeInView(el, VISIBLE_ENOUGH, setInView);
   }, [source]);
 
+  // A banner is one video filling a section, so the block being on screen IS
+  // the impression — there are no cards to distinguish. `chosen`, not the
+  // widget's first: with shuffle on the banner advances as each video ends, and
+  // every one it rotates to has genuinely been shown.
+  useVideoImpression(chosen?.id ?? "", inView && chosen !== undefined);
+
   useEffect(() => {
     const video = videoRef.current;
     // Null in still mode — there is no element, so there is nothing to drive.
@@ -227,8 +234,9 @@ export function Banner({ widget, settings }: WidgetProps) {
   const badgeFrame = Math.min(size.width, Math.round(size.height * FRAME_RATIO));
 
   return (
-    <div ref={rootRef} style={{ position: "absolute", inset: 0 }}>
+    <div class="sje-banner" ref={rootRef} style={{ position: "absolute", inset: 0 }}>
       <div
+        class="sje-banner__frame"
         // A button ONLY when it does something. A `role="button"` that opens
         // nothing is a promise to a screen reader that the widget then breaks,
         // and a focus stop the keyboard user gains nothing by landing on.
@@ -267,11 +275,12 @@ export function Banner({ widget, settings }: WidgetProps) {
             twice. The poster follows the same `object-fit` as the video, so
             the first paint is not a different crop from the second. */}
         {poster && (
-          <img src={poster} alt="" style={{ ...FILL, objectFit: settings.bannerFit }} />
+          <img class="sje-banner__poster" src={poster} alt="" style={{ ...FILL, objectFit: settings.bannerFit }} />
         )}
 
         {source && (
           <video
+            class="sje-banner__video"
             // ⚠️ Keyed by media. Under `rotates` the `src` changes on the same
             // element otherwise, and an element whose `src` is swapped keeps
             // the old frame until it is told to `load()` — a visible stall
@@ -319,6 +328,7 @@ export function Banner({ widget, settings }: WidgetProps) {
           index={openAt}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           onIndex={setOpenAt}
           onClose={() => setOpenAt(null)}
         />

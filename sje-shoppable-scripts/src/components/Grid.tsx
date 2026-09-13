@@ -36,6 +36,7 @@
 // theirs and their reset may undo ours. Inline wins both.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { widgetMedia, posterOf, previewUrlOf, type SJEMedia } from "../lib/sje";
+import { useVideoImpression } from "../lib/analytics";
 import { observeInView } from "../lib/inView";
 import { useElementWidth } from "../lib/useElementWidth";
 import { useHold, usePlaybackFrozen } from "../lib/playback";
@@ -177,6 +178,11 @@ function Card({ media, frozen, live, sticker, mode, lazy, radius, onOpen }: Card
     });
   }, [plays]);
 
+  // `inView`, not `seen`: the impression is the card being on screen, and with
+  // lazy loading off `seen` starts true for every card in the widget whether
+  // the shopper ever scrolled to it or not.
+  useVideoImpression(media.id, inView);
+
   useEffect(() => {
     const video = videoRef.current;
     // Null in still mode — there is no element, so there is nothing to drive.
@@ -205,6 +211,7 @@ function Card({ media, frozen, live, sticker, mode, lazy, radius, onOpen }: Card
 
   return (
     <div
+      class="sje-grid__card"
       ref={cardRef}
       // A real button, not a div with a click handler: this is the one thing
       // on the card a shopper can do, and it should be reachable by keyboard
@@ -238,6 +245,7 @@ function Card({ media, frozen, live, sticker, mode, lazy, radius, onOpen }: Card
     >
       {poster && (
         <img
+          class="sje-grid__poster"
           src={poster}
           alt={media.title || ""}
           loading={lazy ? "lazy" : "eager"}
@@ -247,6 +255,7 @@ function Card({ media, frozen, live, sticker, mode, lazy, radius, onOpen }: Card
 
       {plays && seen && (
         <video
+          class="sje-grid__video"
           ref={videoRef}
           src={preview!}
           poster={poster}
@@ -341,8 +350,9 @@ export function Grid({ widget, settings }: WidgetProps) {
   const hidden = media.length - shown;
 
   return (
-    <div>
+    <div class="sje-grid">
       <div
+        class="sje-grid__items"
         style={{
           display: "grid",
           gridTemplateColumns: TRACKS(settings.columns),
@@ -368,6 +378,7 @@ export function Grid({ widget, settings }: WidgetProps) {
 
       {hidden > 0 && (
         <div
+          class="sje-grid__more"
           style={{
             display: "flex",
             justifyContent: "center",
@@ -375,6 +386,7 @@ export function Grid({ widget, settings }: WidgetProps) {
           }}
         >
           <button
+            class="sje-grid__more-button"
             type="button"
             onClick={() => setExpanded(true)}
             style={{
@@ -413,6 +425,7 @@ export function Grid({ widget, settings }: WidgetProps) {
           index={open}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           onIndex={setOpenAt}
           onClose={() => setOpenAt(null)}
         />

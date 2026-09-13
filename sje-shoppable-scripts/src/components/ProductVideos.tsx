@@ -36,6 +36,7 @@ import {
   taggedWith,
   type SJEMedia,
 } from "../lib/sje";
+import { useVideoImpression } from "../lib/analytics";
 import { observeInView } from "../lib/inView";
 import { useElementWidth } from "../lib/useElementWidth";
 import { useHold, usePlaybackFrozen } from "../lib/playback";
@@ -204,6 +205,11 @@ function Card({
     });
   }, [plays]);
 
+  // `inView`, not `seen`: the impression is the card being on screen, and with
+  // lazy loading off `seen` starts true for every card in the widget whether
+  // the shopper ever scrolled to it or not.
+  useVideoImpression(media.id, inView);
+
   useEffect(() => {
     const video = videoRef.current;
     // Null in still mode — there is no element, so there is nothing to drive.
@@ -231,6 +237,7 @@ function Card({
 
   return (
     <div
+      class="sje-product-videos__card"
       ref={cardRef}
       // A real button, not a div with a click handler: this is the one thing
       // on the card a shopper can do, and it should be reachable by keyboard
@@ -265,6 +272,7 @@ function Card({
     >
       {poster && (
         <img
+          class="sje-product-videos__poster"
           src={poster}
           alt={media.title || ""}
           loading={lazy ? "lazy" : "eager"}
@@ -274,6 +282,7 @@ function Card({
 
       {plays && seen && (
         <video
+          class="sje-product-videos__video"
           ref={videoRef}
           src={preview!}
           poster={poster}
@@ -342,13 +351,13 @@ export function ProductVideos({ widget, settings }: WidgetProps) {
   const width = CARD(settings.columns);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div class="sje-product-videos" style={{ display: "flex", flexDirection: "column" }}>
       <div
         ref={rail.ref}
         // The class carries one thing only: the WebKit scrollbar rule, which
         // is a pseudo-element and so cannot be written inline. Everything the
         // layout depends on stays in `style`, where the theme cannot reach it.
-        class="sje-scroller"
+        class="sje-product-videos__row sje-scroller"
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -393,6 +402,7 @@ export function ProductVideos({ widget, settings }: WidgetProps) {
           index={open}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           onIndex={setOpenAt}
           onClose={() => setOpenAt(null)}
         />

@@ -133,13 +133,29 @@ export function useTokenPx(
   name: string,
   fallback: number,
 ): number {
-  const [value, setValue] = useState(fallback);
+  // ⚠️ Seeded from `documentElement`, NOT from `fallback`.
+  //
+  // The ref is empty on the very first render, so this used to start at the
+  // desktop base and correct itself one effect later. Every consumer that only
+  // wants a length rode that out as a frame of slightly-wrong padding — but a
+  // consumer that turns the number into a DECISION does not: `Lightbox` asks
+  // whether this is a phone, and a first render that says "no" flashes the
+  // arrows on a phone and, because the swipe hint is a mount-only effect,
+  // stops the hint appearing at all.
+  //
+  // These tokens are declared on `:root`, so `documentElement` carries the
+  // same value the ref's element would inherit — and it exists before any of
+  // this renders. `tokenPx` already returns the fallback for a null element or
+  // a browser without `getComputedStyle`.
+  const [value, setValue] = useState(() =>
+    tokenPx(typeof document === "undefined" ? null : document.documentElement, name, fallback),
+  );
 
   useEffect(() => {
     const read = () => setValue(tokenPx(ref.current, name, fallback));
 
-    // The first read has to wait for layout: on the very first render the ref
-    // is still empty, and an effect runs once the node is attached.
+    // Re-read against the real node now it is attached, in case anything
+    // between it and `:root` overrides the token.
     read();
 
     window.addEventListener("resize", read, { passive: true });

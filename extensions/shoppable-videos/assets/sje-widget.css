@@ -104,11 +104,29 @@
    while a `.page-width` holds only this app block, which is the normal case
    for a block added through the Apps section — but if a merchant puts a
    widget in a section alongside other content, that content loses its
-   padding too. Narrow this to a wrapper of our own if that ever comes up.
+   padding too.
+
+   ⚠️ The `:not()` is what keeps that from happening on a PRODUCT page, and it
+   is not optional. Every other layout is added as its own section, where the
+   `.page-width` around it holds nothing else. The product row is the one
+   layout dropped into a section the theme already owns: Dawn's
+   `main-product` wraps the media gallery AND the right-hand info column in a
+   single `.page-width`, and a block added to that column is a descendant of
+   it. Breaking out there takes the max-width, the side padding and the
+   centring off the whole product section — the gallery and the buy form go
+   edge to edge, and the negative margins on the theme's own `.grid` then
+   push the page into horizontal overflow.
+
+   So a `.page-width` holding a product row does not break out at all, and
+   that is the right answer even when it also holds a carousel: this block's
+   own `padding` setting defaults to None for the same reason — the section it
+   sits in has its own measure, and the row is built to fit whatever width it
+   is handed.
 
    Browsers without `:has()` simply skip the rule and the widget stays inside
-   the container: constrained, not broken. */
-.page-width:has(.sje-widget) {
+   the container: constrained, not broken. Those browsers have never had the
+   product-page problem either, for the same reason. */
+.page-width:has(.sje-widget):not(:has(.sje-widget--product-videos)) {
   max-width: none !important;
   width: 100% !important;
   margin-inline: 0 !important;
@@ -141,6 +159,50 @@
 
 .sje-widget--pad-none {
   width: 98%;
+}
+
+/* ── The banner's own unit ──
+
+   The fourth and last thing here that is not a multiple of the two standard
+   tokens, and the only one that answers a CONTAINER rather than the viewport.
+
+   Why it has to. A banner's height comes from its width and a shape the
+   merchant picked, so the box scales with the section: a 16:9 banner is about
+   1260x709 on a desktop and 371x209 on a phone — 70% smaller. The standard
+   font token steps 14px to 12px at the breakpoint, which is 14% smaller. Text
+   sized from it therefore GROWS relative to its banner as the screen shrinks,
+   and a three-line heading that sits comfortably on a desktop hero overflows
+   the same banner on a phone. Nothing on the two-token scale can fix that,
+   because the thing it needs to track is not the viewport.
+
+   `cqi` is 1% of the container's inline size, so the text tracks the banner
+   exactly. The `clamp()` is what stops that being absurd at either end: a
+   floor so a narrow banner's copy stays readable rather than following the box
+   to nothing, and a ceiling so a full-bleed banner on a large monitor does not
+   print a heading four inches tall.
+
+   ⚠️ TWO declarations, and the order matters. The first is the plain token,
+   which is what a browser without container queries keeps — the same sizing
+   the banner had before, no worse than it was. The second only applies inside
+   `@supports`, so an old browser never sees `container-type` either. Writing
+   the `clamp()` unconditionally would be worse than useless: a custom property
+   accepts any token stream, so `--sje-banner-unit` would still be SET, and
+   every `calc()` reading it would become invalid at computed-value time and
+   fall back to the theme's inherited font size rather than to this one.
+
+   ⚠️ `container-type: inline-size` makes this element a containing block for
+   absolutely positioned descendants. That changes nothing here — the wrapper
+   is already `position: relative` and every layer inside is positioned against
+   it — but do not copy the pattern onto a wrapper where it is not. */
+.sje-widget--banner {
+  --sje-banner-unit: var(--sje-standard-font-size, 14px);
+}
+
+@supports (width: 1cqi) {
+  .sje-widget--banner {
+    container-type: inline-size;
+    --sje-banner-unit: clamp(8px, 1.15cqi, 20px);
+  }
 }
 
 /* ── How many cards go across ──

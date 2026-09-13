@@ -26,6 +26,7 @@
 // theirs and their reset may undo ours. Inline wins both.
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { widgetMedia, posterOf, previewUrlOf, type SJEMedia } from "../lib/sje";
+import { useVideoImpression } from "../lib/analytics";
 import { observeInView } from "../lib/inView";
 import { useHold, usePlaybackFrozen } from "../lib/playback";
 import { useLiveProducts, type LiveProducts } from "../lib/products";
@@ -368,6 +369,11 @@ function StackCard({
     if (front) setSeen(true);
   }, [front]);
 
+  // Front AND on screen. A deck scrolled past still has a front card, and
+  // counting that would give every stacked widget an impression per page view
+  // whether it was ever looked at or not.
+  useVideoImpression(media.id, front && inView);
+
   const poster = posterOf(media);
   // Not `media.previewUrl` — that is the ladder's head, the 1080p encode.
   const preview = previewUrlOf(media);
@@ -400,6 +406,7 @@ function StackCard({
 
   return (
     <div
+      class="sje-stacked__card"
       // A real button: bringing a card forward, or opening the one already
       // there, is the only thing a shopper can do here.
       role="button"
@@ -449,10 +456,11 @@ function StackCard({
         WebkitTapHighlightColor: "transparent",
       }}
     >
-      {poster && <img src={poster} alt={media.title || ""} loading="lazy" style={FILL} />}
+      {poster && <img class="sje-stacked__poster" src={poster} alt={media.title || ""} loading="lazy" style={FILL} />}
 
       {preview && seen && (
         <video
+          class="sje-stacked__video"
           ref={videoRef}
           src={preview}
           poster={poster}
@@ -563,8 +571,9 @@ export function Stacked({ widget, settings }: WidgetProps) {
   const arrowOffset = halfSpan(step, cardWidth, depth) + spacing + arrowSize;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div class="sje-stacked" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div
+        class="sje-stacked__stage"
         ref={stageRef}
         // Arrow keys move the deck when the shopper is in it. Handled here
         // rather than on each card so it keeps working while the focus is on
@@ -637,6 +646,7 @@ export function Stacked({ widget, settings }: WidgetProps) {
         {arrows === "sides" && (
           <>
             <div
+              class="sje-stacked__side sje-stacked__side--prev"
               style={{
                 position: "absolute",
                 // ⚠️ Against the DECK's edge, not the stage's.
@@ -661,6 +671,7 @@ export function Stacked({ widget, settings }: WidgetProps) {
               <Arrow direction="prev" tone="overlay" size={arrowSize} spent={spent} onClick={() => move(-1)} />
             </div>
             <div
+              class="sje-stacked__side sje-stacked__side--next"
               style={{
                 position: "absolute",
                 insetInlineEnd: `max(${sp(1)}, calc(50% - ${arrowOffset}px))`,
@@ -705,6 +716,7 @@ export function Stacked({ widget, settings }: WidgetProps) {
           index={open}
           live={live}
           products={settings.playerProducts}
+          widgetId={widget.id}
           // ⚠️ `setOpenAt` ONLY — the deck deliberately does not follow.
           //
           // It used to: moving in the player also moved `active`, on the

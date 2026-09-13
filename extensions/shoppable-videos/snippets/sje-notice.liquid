@@ -1,5 +1,5 @@
 {%- if request.design_mode -%}
-  {%- if frame != blank -%}<div style="{{ frame }}">{%- endif -%}
+  {%- if frame != blank -%}<div class="sje-widget__notice-frame" style="{{ frame }}">{%- endif -%}
   <div class="sje-widget__notice">
     {%- case reason -%}
       {%- when 'not-found' -%}
@@ -8,6 +8,12 @@
       {%- when 'off' -%}
         &ldquo;{{ name }}&rdquo; is switched off, so it is hidden from shoppers.
         Turn on Active in the Shoppable Videos app to show it.
+      {%- when 'locked' -%}
+        &ldquo;{{ name }}&rdquo; uses a layout your plan does not include, so it
+        is hidden from shoppers. Upgrade in the Shoppable Videos app to show it.
+      {%- when 'paused' -%}
+        &ldquo;{{ name }}&rdquo; is paused because your plan includes fewer
+        widgets. Upgrade in the Shoppable Videos app, or delete another widget.
       {%- when 'empty' -%}
         &ldquo;{{ name }}&rdquo; has no videos yet, so there is nothing to show.
         Add some in the Shoppable Videos app.
